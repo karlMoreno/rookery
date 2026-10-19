@@ -1,0 +1,26 @@
+# Rookery workspace: five library/binary crates plus the `gates` test crate.
+# Every crate inherits edition, version and lint settings from here so a new
+# crate (or a T3 worktree thread) can't drift from the shared baseline.
+[workspace]
+members = ["crates/*", "tests/gates"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/OWNER/rookery"
+
+# Shared dependency versions. Crates opt in with `foo.workspace = true`, so a
+# version bump happens in one place and every crate moves together.
+[workspace.dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

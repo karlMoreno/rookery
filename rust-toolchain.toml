@@ -1,0 +1,5 @@
+# Pinned so the Air, every T3 worktree and Linux CI compile with the same rustc.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

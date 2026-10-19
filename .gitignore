@@ -1,0 +1,8 @@
+/target
+.t3-worktrees/
+.cargo/config.toml
+runs/*
+!runs/golden/
+scene/.venv
+__pycache__/
+.DS_Store

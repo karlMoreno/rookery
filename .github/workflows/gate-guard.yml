@@ -1,0 +1,22 @@
+# Rule 9: protected paths are enforced, not remembered.
+# Fails any pull request not opened by the repo owner (Karl) that touches a
+# protected path. An agent proposes a gate/limit change in its own PR, and Karl
+# makes it himself.
+name: gate-guard
+
+on:
+  pull_request:
+
+jobs:
+  gate-guard:
+    runs-on: ubuntu-latest
+    if: github.actor != github.repository_owner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check protected paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: scripts/gate-guard.sh "$BASE" "$HEAD"

@@ -1,0 +1,14 @@
+# Phase gate tests. One integration test per phase lives in `tests/`
+# (e.g. tests/phase1_drop.rs). Protected path: owned by Karl via CODEOWNERS
+# and enforced by .github/workflows/gate-guard.yml (rule 9).
+[package]
+name = "gates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

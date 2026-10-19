@@ -1,0 +1,5 @@
+# Protected paths (rule 9). Only the owner merges changes here; gate-guard
+# fails any PR from someone else that touches them.
+/tests/gates/                 @OWNER
+/crates/mast/src/limits.rs    @OWNER
+/scene/generated/             @OWNER
