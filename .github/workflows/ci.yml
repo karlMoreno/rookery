@@ -76,4 +76,4 @@ jobs:
         working-directory: scene
         # pytest exits 5 when it collects no tests; that's expected until Phase 2.
         run: uv run pytest ../tests/gates -q || [ $? -eq 5 ]
-      - run: echo "headless: pending Phase 4"
+      - run: 'echo "headless: pending Phase 4"'
