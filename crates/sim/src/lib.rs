@@ -34,6 +34,10 @@
 
 use std::path::Path;
 
+// Raw bindgen output, private to this crate (row 1.5). Only `Sim` (row 1.6)
+// will call into it.
+mod ffi;
+
 /// Everything that can go wrong at the facade boundary.
 ///
 /// Errors are returned, never panicked, so a bad scene file or a wrong
