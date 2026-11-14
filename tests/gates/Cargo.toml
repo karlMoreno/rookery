@@ -10,5 +10,9 @@ publish = false
 
 [dependencies]
 
+# Gates drive the crates through their public surfaces only.
+[dev-dependencies]
+sim = { path = "../../crates/sim" }
+
 [lints]
 workspace = true
