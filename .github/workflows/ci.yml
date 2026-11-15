@@ -37,6 +37,8 @@ jobs:
           dir="$HOME/.mujoco/mujoco-$MUJOCO_VERSION"
           echo "MUJOCO_DIR=$dir" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$dir/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+      - name: No unsafe outside crates/sim/src (rule 4)
+        run: scripts/check-unsafe.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --exclude gates
