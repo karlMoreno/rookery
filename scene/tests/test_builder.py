@@ -1,5 +1,8 @@
 """Row 2.3: the builder emits a tray and a water plane, and the scene renders."""
 
+import os
+import sys
+
 import mujoco
 import numpy as np
 import pytest
@@ -64,7 +67,16 @@ def test_num_is_fixed_six_decimals_without_negative_zero():
     assert num(0.1, -0.0, 1e-9, -2) == "0.100000 0.000000 0.000000 -2.000000"
 
 
+def _gl_or_skip():
+    """Skip before touching GL when there is no way to get a context: off
+    macOS, with MUJOCO_GL unset and no display. GLFW would abort the process
+    rather than raise."""
+    if sys.platform != "darwin" and not os.environ.get("MUJOCO_GL") and not os.environ.get("DISPLAY"):
+        pytest.skip("no offscreen GL: set MUJOCO_GL=egl or osmesa")
+
+
 def test_render_frame_zero_shows_tray_and_water(tmp_path):
+    _gl_or_skip()
     from scene.render import main
 
     out = tmp_path / "tray.png"
@@ -76,6 +88,7 @@ def test_render_frame_zero_shows_tray_and_water(tmp_path):
 
 
 def test_render_pixels_are_not_blank():
+    _gl_or_skip()
     from scene.render import render_frame
 
     m, _ = load()
