@@ -26,17 +26,20 @@
 //!                             ffi.rs (bindgen over mujoco.h)
 //! ```
 //!
-//! Row 1.4 declares this surface with every body left as `todo!()`; rows
-//! 1.5 (bindings) and 1.6 (safe facade) fill it in without changing a
-//! signature. The Phase 1 gate (`tests/gates/tests/phase1_drop.rs`) is
-//! written against exactly this surface, so it compiles now and fails at
-//! the first `todo!()` until 1.6 lands.
+//! Row 1.4 declared this surface, row 1.5 generated the bindings, and row
+//! 1.6 filled in [`Sim`] (in `src/sim.rs`) without changing a signature.
+//! The Phase 1 gate (`tests/gates/tests/phase1_drop.rs`) is written against
+//! exactly this surface.
 
-use std::path::Path;
+#![deny(unsafe_op_in_unsafe_fn)]
 
-// Raw bindgen output, private to this crate (row 1.5). Only `Sim` (row 1.6)
-// will call into it.
+// Raw bindgen output, private to this crate (row 1.5). Only `sim.rs` calls
+// into it.
 mod ffi;
+// The safe facade and every `unsafe` block that touches MuJoCo (row 1.6).
+mod sim;
+
+pub use sim::Sim;
 
 /// Everything that can go wrong at the facade boundary.
 ///
@@ -81,52 +84,3 @@ pub struct Snapshot {
 /// [`Sim::apply`]. Its length must equal the model's actuator count `nu`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Targets(pub Vec<f64>);
-
-/// The Facade itself: one loaded MuJoCo model plus its simulation data.
-///
-/// Row 1.6 replaces the placeholder field with
-/// `{ model: *mut mjModel, data: *mut mjData, body_names: Vec<String> }`
-/// and a `Drop` that frees `data` then `model`. Fields stay private so no
-/// caller can reach the raw pointers.
-#[derive(Debug)]
-pub struct Sim {
-    _private: (),
-}
-
-impl Sim {
-    /// Load an MJCF file and allocate its data (`mj_loadXML` + `mj_makeData`).
-    ///
-    /// # Errors
-    /// [`SimError::Load`] when the file is missing or MuJoCo rejects it.
-    pub fn load(path: impl AsRef<Path>) -> Result<Sim, SimError> {
-        let _ = path.as_ref();
-        todo!("row 1.6: mj_loadXML, mj_makeData, cache body names")
-    }
-
-    /// Advance the physics by one `timestep` (`mj_step`).
-    pub fn step(&mut self) {
-        todo!("row 1.6: mj_step")
-    }
-
-    /// Copy `time`, `xpos` and `xquat` for every body into a [`Snapshot`].
-    pub fn snapshot(&self) -> Snapshot {
-        todo!("row 1.6: read time, xpos, xquat for every body")
-    }
-
-    /// Write `targets` to `mjData.ctrl` for the next step.
-    ///
-    /// # Errors
-    /// [`SimError::TargetLen`] when `targets.0.len() != nu`; `ctrl` is left
-    /// unchanged in that case.
-    pub fn apply(&mut self, targets: &Targets) -> Result<(), SimError> {
-        let _ = targets;
-        todo!("row 1.6: check len == nu, write ctrl")
-    }
-
-    /// Index of the body called `name` in [`Snapshot::bodies`] (equal to its
-    /// MuJoCo body id), or `None` if the model has no such body.
-    pub fn body_index(&self, name: &str) -> Option<usize> {
-        let _ = name;
-        todo!("row 1.6: look up the cached body names")
-    }
-}
