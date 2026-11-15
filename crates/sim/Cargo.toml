@@ -5,9 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+# The native library build.rs links. Cargo then refuses a second crate that
+# links MuJoCo, so every binding stays in this one (rule 4).
+links = "mujoco"
 
 [dependencies]
 thiserror.workspace = true
 
 [lints]
 workspace = true
+
+[build-dependencies]
+bindgen = "0.73"
