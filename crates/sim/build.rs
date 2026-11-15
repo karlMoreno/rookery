@@ -176,7 +176,7 @@ fn generate_bindings(layout: &Layout) {
         .allowlist_type("mjData")
         .allowlist_type("mjtNum")
         .allowlist_var("mjVERSION_HEADER")
-        // Match the workspace edition so the output uses `unsafe extern`.
+        // Match the workspace edition so the extern blocks use 2024 syntax.
         .rust_edition(bindgen::RustEdition::Edition2024)
         // Emits rerun-if-changed for every header bindgen reads.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
