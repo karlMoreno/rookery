@@ -72,11 +72,13 @@ def test_parse_cells():
     assert parse_cells("3X5") == (3, 5)
 
 
-def test_cli_accepts_the_phase2_demo_args(capsys):
-    assert main(["--trays", "1", "--cells", "4x4", "--shelf-gap", "0.08"]) == 0
-    assert "spec ok (4x4 cells, 1 tray(s))" in capsys.readouterr().out
+def test_cli_accepts_the_phase2_demo_args(tmp_path, capsys):
+    out = tmp_path / "rookery.xml"
+    assert main(["--trays", "1", "--cells", "4x4", "--shelf-gap", "0.08", "--out", str(out)]) == 0
+    assert "(4x4 cells, 1 tray(s))" in capsys.readouterr().out
+    assert out.read_text().startswith("<mujoco")
 
 
 def test_cli_rejects_a_bad_spec(capsys):
-    assert main(["--cells", "0x4"]) == 2
+    assert main(["--cells", "0x4", "--out", "/nonexistent/never-written.xml"]) == 2
     assert "rows must be" in capsys.readouterr().err
