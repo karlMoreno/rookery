@@ -12,3 +12,5 @@ dependencies = [
 # Lets tests/ import the `scene` package without installing it.
 pythonpath = ["."]
 testpaths = ["tests"]
+# Gates are named for their phase (tests/gates/phase2_scene.py), not test_*.
+python_files = ["test_*.py", "phase*_*.py"]

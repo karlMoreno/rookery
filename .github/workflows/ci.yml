@@ -79,6 +79,8 @@ jobs:
         run: uv run pytest tests -q
       - name: Python gates
         working-directory: scene
-        # pytest exits 5 when it collects no tests; that's expected until Phase 2.
-        run: uv run pytest ../tests/gates -q || [ $? -eq 5 ]
+        # pytest exits 5 when it collects no tests, which is expected until 2.2 lands.
+        # -c: the args live outside scene/, so pytest would not find scene's
+        # pyproject (python_files for phase*_*.py gates, pythonpath) on its own.
+        run: uv run pytest ../tests/gates -q -c pyproject.toml || [ $? -eq 5 ]
       - run: 'echo "headless: pending Phase 4"'
