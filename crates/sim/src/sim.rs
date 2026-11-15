@@ -36,6 +36,7 @@
 //!   │ + snapshot(&self) -> Snapshot       │──▶ reads time, xpos, xquat
 //!   │ + apply(&mut self, &Targets)        │──▶ writes ctrl
 //!   │ + body_index(&self, name)           │    (no FFI)
+//!   │ + timestep(&self) -> f64            │──▶ reads opt.timestep
 //!   │ ~ drop: mj_deleteData, mj_deleteModel
 //!   └─────────────────────────────────────┘
 //! ```
@@ -209,6 +210,14 @@ impl Sim {
         self.body_names.iter().position(|n| n == name)
     }
 
+    /// The model's physics timestep `opt.timestep`, in seconds. Callers use
+    /// it to turn a duration into a step count.
+    pub fn timestep(&self) -> f64 {
+        // SAFETY: invariant 1, so `model` is non-null and points to a valid
+        // `mjModel`. Reading one field does not mutate it.
+        unsafe { (*self.model).opt.timestep }
+    }
+
     /// Number of bodies in the model, the world body included.
     fn nbody(&self) -> usize {
         // SAFETY: invariant 1, so `model` is non-null and points to a valid
@@ -279,6 +288,7 @@ mod tests {
         assert_eq!(sim.body_index("world"), Some(0));
         assert_eq!(sim.body_index("box"), Some(1));
         assert_eq!(sim.body_index("nope"), None);
+        assert_eq!(sim.timestep(), 0.001);
     }
 
     #[test]

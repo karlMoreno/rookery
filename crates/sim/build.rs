@@ -100,17 +100,24 @@ impl Layout {
 
     /// Tell rustc where MuJoCo is and how to link it. The rpath makes the
     /// binary find the shared library at run time without DYLD_*/LD_* help.
+    ///
+    /// `rustc-link-arg` reaches only this crate's own targets, so the same
+    /// directory is also published as `links` metadata. A direct dependent's
+    /// build script reads it as `DEP_MUJOCO_RPATH` and adds the rpath to its
+    /// own binaries (`crates/rookery/build.rs` does this).
     fn emit_link_lines(&self) {
         match self {
             Self::Framework { dir } => {
                 println!("cargo:rustc-link-search=framework={}", dir.display());
                 println!("cargo:rustc-link-lib=framework=mujoco");
                 println!("cargo:rustc-link-arg=-Wl,-rpath,{}", dir.display());
+                println!("cargo::metadata=rpath={}", dir.display());
             }
             Self::Release { lib_dir, .. } => {
                 println!("cargo:rustc-link-search=native={}", lib_dir.display());
                 println!("cargo:rustc-link-lib=dylib=mujoco");
                 println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
+                println!("cargo::metadata=rpath={}", lib_dir.display());
             }
         }
     }

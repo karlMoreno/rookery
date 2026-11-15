@@ -56,12 +56,15 @@ name is `@rpath/mujoco.framework/Versions/A/libmujoco.3.16.0.dylib`, so such
 a binary fails at launch with "Library not loaded" until one of these exists;
 Linux CI is covered by `LD_LIBRARY_PATH`.
 
-- rustflags in the generated `.cargo/config.toml` (one line in
-  `scripts/worktree-setup.sh`), e.g.
-  `[target.'cfg(target_os = "macos")'] rustflags = ["-C", "link-arg=-Wl,-rpath,<MUJOCO_DIR>"]`; or
-- a `build.rs` in the binary crate that forwards an rpath read from
-  `DEP_MUJOCO_<KEY>` metadata emitted here (`links = "mujoco"` makes that
-  channel available). Not emitted yet; add it when a phase needs it.
+- **Done (row 1.7) for direct dependents:** `build.rs` here publishes the
+  directory as `cargo::metadata=rpath=<dir>`. A crate that depends on `sim`
+  reads `DEP_MUJOCO_RPATH` in its own `build.rs` and emits
+  `cargo:rustc-link-arg=-Wl,-rpath,$DEP_MUJOCO_RPATH`, as
+  `crates/rookery/build.rs` does.
+- Still open on the Air: the `gates` tests (protected path). Run them
+  locally with `RUSTFLAGS="-C link-arg=-Wl,-rpath,$MUJOCO_DIR"`. Another
+  option is rustflags in the generated `.cargo/config.toml`, e.g.
+  `[target.'cfg(target_os = "macos")'] rustflags = ["-C", "link-arg=-Wl,-rpath,<MUJOCO_DIR>"]`.
 
 ## The raw surface (`src/ffi.rs`)
 
