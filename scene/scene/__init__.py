@@ -6,3 +6,7 @@ parameters (trays, cells, pitch, shelf gap, exit tray) into MJCF under
 means changing arguments and regenerating, and the output is byte-identical
 for the same arguments.
 """
+
+from .spec import PRESETS, SceneSpec, SpecError
+
+__all__ = ["PRESETS", "SceneSpec", "SpecError"]
