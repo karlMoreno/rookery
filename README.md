@@ -10,3 +10,11 @@ Lua (behaviors), Python (scene generation, video).
 - `brew install rustup llvm uv gh`, then `rustup default stable`
 - `export LIBCLANG_PATH="$(brew --prefix llvm)/lib"` in your shell profile
 - `scripts/worktree-setup.sh` once per checkout, then `cargo build --workspace`
+
+## Run
+
+Phase 1 demo. This drops a 0.1 m box onto a plane, runs 2 s headless, and prints the box's final height (about 0.05):
+
+```bash
+cargo run -p rookery -- examples/drop.xml
+```
