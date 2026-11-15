@@ -5,8 +5,8 @@
 
 ``--frame N`` steps the physics N times from the initial state and renders
 camera ``overview`` (the free camera if the scene has none). Headless: on
-macOS it uses CGL (``MUJOCO_GL=cgl``), so no window ever opens. Elsewhere it
-uses ``MUJOCO_GL`` if set, else EGL. Every path is resolved to an absolute
+macOS it uses CGL (``MUJOCO_GL=cgl``), so no window ever opens. Elsewhere set
+``MUJOCO_GL`` (``egl`` or ``osmesa``) for a headless machine. Every path is resolved to an absolute
 path first, because GLFW on macOS changes the cwd if a window does open.
 
 With no ``--scene``, it builds the default ``SceneSpec`` in memory, so you
@@ -22,8 +22,10 @@ import sys
 import zlib
 from pathlib import Path
 
-# Pick the offscreen GL backend before mujoco is imported.
-os.environ.setdefault("MUJOCO_GL", "cgl" if sys.platform == "darwin" else "egl")
+# Pick the offscreen GL backend before mujoco is imported. Only macOS gets a
+# default: forcing `egl` where libEGL is missing breaks `import mujoco` itself.
+if sys.platform == "darwin":
+    os.environ.setdefault("MUJOCO_GL", "cgl")
 
 import mujoco  # noqa: E402
 import numpy as np  # noqa: E402
