@@ -1,7 +1,8 @@
 //! `mast`: stacker-crane kinematics, independent of the farm.
 //!
-//! Row 3.1 declares this surface over `todo!()`. Rows 3.3 (kinematics and
-//! Command) and 3.4 (clamps) fill it in without changing a signature. The
+//! Row 3.1 declared this surface. Row 3.3 filled in the kinematics
+//! ([`kinematics`]) and [`MoveCommand`], and row 3.4 fills in [`clamp`],
+//! without changing a signature. The
 //! Phase 3 gate (`tests/gates/tests/phase3_clamp.rs`) is written against
 //! [`clamp`] and [`limits`], so it compiles now and fails until 3.4.
 //!
@@ -28,12 +29,16 @@
 //! `mast` never depends on `sim` or `rookery-core`. The Integrator fills
 //! [`GantryObs`] from the sim snapshot, and CI checks `cargo tree -p mast`.
 
+pub mod kinematics;
 pub mod limits;
 
+use serde::{Deserialize, Serialize};
+
+pub use kinematics::{SceneMeta, cell_pose, exit_pose, home};
 pub use limits::ShelfWindows;
 
 /// The crane's four prismatic joints, in the order used by every `[f64; 4]`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Axis {
     /// `rail_y`: the truck along the floor rail.
     RailY,
@@ -126,14 +131,25 @@ pub const DONE_TOL: f64 = 0.002;
 /// Field names are fixed here for rows 3.3–3.5: `goal` is where the axis
 /// goes and `start` is where it was. The plan's 3.1 text says `target`; that
 /// word now means only the per-tick value in [`JointTargets`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MoveCommand {
     pub axis: Axis,
     pub goal: f64,
     /// The axis target when the first tick ran, so [`Command::undo`] knows
     /// where to go back to. `None` until then.
+    #[serde(default)]
     start: Option<f64>,
+    /// Ticks spent waiting for the measured position after the target
+    /// reached `goal`. Not logged.
+    #[serde(skip)]
+    settling: u32,
 }
+
+/// How long a [`MoveCommand`] waits for the measured position to settle
+/// within [`DONE_TOL`] once its target has reached `goal`, in seconds. After
+/// that it reports [`MastError::Timeout`]. A critically damped axis settles
+/// in under 1 s (row 3.2 test), so 2 s is generous.
+pub const SETTLE_TIMEOUT: f64 = 2.0;
 
 impl MoveCommand {
     pub fn new(axis: Axis, goal: f64) -> Self {
@@ -141,18 +157,89 @@ impl MoveCommand {
             axis,
             goal,
             start: None,
+            settling: 0,
         }
+    }
+
+    /// Where the axis was when the first tick ran, once it has run.
+    pub fn start(&self) -> Option<f64> {
+        self.start
     }
 }
 
 impl Command for MoveCommand {
     fn tick(&mut self, st: &mut GantryState, obs: &GantryObs, dt: f64) -> CmdStatus {
-        let _ = (st, obs, dt, self.start);
-        todo!("row 3.3: step toward goal at MAX_VEL through clamp, Done within tolerance")
+        let i = self.axis.index();
+        let range = limits::RANGES[i];
+        if !range.contains(self.goal) {
+            return CmdStatus::Failed(MastError::OutOfRange {
+                axis: self.axis,
+                goal: self.goal,
+            });
+        }
+        let current = st.targets.0[i];
+        self.start.get_or_insert(current);
+
+        // Step the target toward the goal by at most MAX_VEL · dt. Row 3.4
+        // routes this through `clamp` (range, rate, shelf windows); until
+        // then the command keeps to its own axis's rate limit.
+        let max_step = limits::MAX_VEL[i] * dt.max(0.0);
+        let delta = (self.goal - current).clamp(-max_step, max_step);
+        st.targets.0[i] = if (self.goal - current).abs() <= max_step {
+            self.goal // land exactly on the goal, with no float residue
+        } else {
+            current + delta
+        };
+
+        if st.targets.0[i] != self.goal {
+            return CmdStatus::Running;
+        }
+        // The target is at the goal. Done once the measured joint agrees,
+        // which catches actuator lag and gravity sag (settled in 3.1).
+        if (obs.q[i] - self.goal).abs() <= DONE_TOL {
+            return CmdStatus::Done;
+        }
+        self.settling += 1;
+        if f64::from(self.settling) * dt > SETTLE_TIMEOUT {
+            CmdStatus::Failed(MastError::Timeout { axis: self.axis })
+        } else {
+            CmdStatus::Running
+        }
+    }
+
+    /// A move back to where this one started. Before the first tick there is
+    /// nothing to reverse, so the undo is a command that is done at once.
+    fn undo(&self) -> Box<dyn Command> {
+        match self.start {
+            Some(start) => Box::new(MoveCommand::new(self.axis, start)),
+            None => Box::new(Noop),
+        }
+    }
+}
+
+/// A command that is done immediately: the undo of a move that never ran.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Noop;
+
+impl Command for Noop {
+    fn tick(&mut self, _st: &mut GantryState, _obs: &GantryObs, _dt: f64) -> CmdStatus {
+        CmdStatus::Done
     }
 
     fn undo(&self) -> Box<dyn Command> {
-        todo!("row 3.3: a MoveCommand back to `start`")
+        Box::new(Noop)
+    }
+}
+
+/// Every command the crane ran, with the tick it started on (rule 6: a bug
+/// report is a run id). It serialises to JSON for the run log.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct CommandLog(pub Vec<(u64, MoveCommand)>);
+
+impl CommandLog {
+    /// Record `cmd` as started on `tick`.
+    pub fn push(&mut self, tick: u64, cmd: MoveCommand) {
+        self.0.push((tick, cmd));
     }
 }
 
@@ -162,6 +249,26 @@ pub trait Hook {
     fn engage_dz(&self) -> f64;
     /// Horizontal reach of the hook past the arm's tip, metres.
     fn reach(&self) -> f64;
+}
+
+/// The Phase 3 hook: a passive J-hook. A finger runs along +X from the arm
+/// tip with an upturned tip, so it slides under a handle and catches it
+/// when lifted. It has no actuator of its own beyond `hook_lift`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct PassiveHook;
+
+impl Hook for PassiveHook {
+    /// From the engage height, the finger rises half the box-top-to-handle
+    /// gap to touch the handle, then a little more to carry it. 2 cm is
+    /// within `HOOK_LIFT` (3 cm), as the preview showed (1.2 cm of lift
+    /// plus 1 cm of clearance).
+    fn engage_dz(&self) -> f64 {
+        0.02
+    }
+
+    fn reach(&self) -> f64 {
+        kinematics::HOOK_FINGER
+    }
 }
 
 /// Make `next` safe to send, given the previous targets `prev` and the tick

@@ -1,0 +1,26 @@
+{
+  "box_size": [
+    0.12,
+    0.12,
+    0.08
+  ],
+  "cell_pitch": 0.15,
+  "cols": 4,
+  "derived": {
+    "exit_pose": [
+      -0.395,
+      0.0,
+      0.1
+    ],
+    "rail_line_x": -0.5900000000000001
+  },
+  "exit_tray_pose": null,
+  "guide_rail_height": 1.0,
+  "handle_height": 0.03,
+  "preset": null,
+  "rail_x": null,
+  "rows": 4,
+  "shelf_gap": 0.08,
+  "trays": 1,
+  "water_depth": 0.05
+}
