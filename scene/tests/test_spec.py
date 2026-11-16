@@ -37,7 +37,7 @@ def test_cell_centers_are_grid_ordered_and_centred():
         # Plan checks.
         ({"box_size": (0.15, 0.10, 0.08)}, "footprint"),          # equals the pitch
         ({"box_size": (0.10, 0.20, 0.08)}, "footprint"),          # above the pitch
-        ({"water_depth": 0.11}, "water plane"),                    # handle top 0.11 == water
+        ({"water_depth": 0.125}, "water plane"),                   # handle top 0.125 == water
         ({"water_depth": 0.20}, "water plane"),                    # handle under water
         # Non-positive dimensions.
         ({"cell_pitch": 0.0}, "cell_pitch"),

@@ -37,6 +37,7 @@
 //!   │ + apply(&mut self, &Targets)        │──▶ writes ctrl
 //!   │ + body_index(&self, name)           │    (no FFI)
 //!   │ + timestep(&self) -> f64            │──▶ reads opt.timestep
+//!   │ + qpos(&self) -> Vec<f64>           │──▶ copies qpos
 //!   │ ~ drop: mj_deleteData, mj_deleteModel
 //!   └─────────────────────────────────────┘
 //! ```
@@ -218,6 +219,22 @@ impl Sim {
         unsafe { (*self.model).opt.timestep }
     }
 
+    /// A copy of the generalized positions `mjData.qpos` (`nq` values, in
+    /// MuJoCo joint order). The run log records it every tick, so a run can
+    /// be replayed exactly (rule 6).
+    pub fn qpos(&self) -> Vec<f64> {
+        // SAFETY: invariant 1, so `model` is non-null and valid.
+        let nq = usize::try_from(unsafe { (*self.model).nq }).unwrap_or(0);
+        if nq == 0 {
+            return Vec::new();
+        }
+        // SAFETY: invariants 1 and 2. `qpos` is a non-null array of exactly
+        // `nq` mjtNums when nq > 0 (sized from `model` by mj_makeData).
+        // `&self` means no step runs while the slice is alive, and it is
+        // copied out before returning.
+        unsafe { std::slice::from_raw_parts((*self.data).qpos, nq) }.to_vec()
+    }
+
     /// Number of bodies in the model, the world body included.
     fn nbody(&self) -> usize {
         // SAFETY: invariant 1, so `model` is non-null and points to a valid
@@ -292,6 +309,10 @@ mod tests {
         assert_eq!(sim.body_index("box"), Some(1));
         assert_eq!(sim.body_index("nope"), None);
         assert_eq!(sim.timestep(), 0.001);
+        // One free joint: 3 position + 4 quaternion values, starting at z = 0.5.
+        let q = sim.qpos();
+        assert_eq!(q.len(), 7);
+        assert_eq!(q[2], 0.5);
     }
 
     #[test]

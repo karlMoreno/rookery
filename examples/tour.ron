@@ -1,0 +1,10 @@
+// Phase 3 demo tour (row 3.5): `rookery run --script examples/tour.ron --log runs/`.
+// Poses, not numbers: each Goto expands into safe single-axis MoveCommands
+// (crates/rookery/src/script.rs), from the scene's rookery.json.
+[
+    Goto(Home),
+    Goto(Cell(0, 0)),
+    Goto(Cell(3, 3)),
+    Goto(Exit),
+    Goto(Home),
+]

@@ -87,6 +87,11 @@ impl<H: Hooks> Runner<H> {
         &self.sim
     }
 
+    /// Write access to the hooks, e.g. to close a run.
+    pub fn hooks_mut(&mut self) -> &mut H {
+        &mut self.hooks
+    }
+
     /// Read access to the hooks, e.g. for what they recorded.
     // Used by the tests now; later phases read hook state through it.
     #[cfg_attr(not(test), allow(dead_code))]

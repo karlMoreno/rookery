@@ -19,12 +19,14 @@
 //! ```
 
 mod runner;
+mod script;
+mod tour;
 
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use sim::Sim;
 
 use runner::{NoHooks, Runner};
@@ -35,15 +37,32 @@ const DURATION_S: f64 = 2.0;
 const BODY: &str = "box";
 
 #[derive(Debug, Parser)]
-#[command(version, about = "Run a Rookery scene headless")]
+#[command(
+    version,
+    about = "Run a Rookery scene headless",
+    args_conflicts_with_subcommands = true
+)]
 struct Cli {
-    /// MJCF scene to load, e.g. scene/generated/rookery.xml
-    scene: PathBuf,
+    #[command(subcommand)]
+    cmd: Option<Cmd>,
+    /// MJCF scene to load and summarise, e.g. scene/generated/rookery.xml
+    scene: Option<PathBuf>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Cmd {
+    /// Play a tour script on the crane and log every tick (Phase 3 demo).
+    Run(tour_cmd::RunArgs),
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(&cli) {
+    let result = match (&cli.cmd, &cli.scene) {
+        (Some(Cmd::Run(args)), _) => tour_cmd::run(args),
+        (None, Some(scene)) => run(scene).map(|r| r.to_string()),
+        (None, None) => Err("give a scene to load, or `rookery run --script <tour.ron>`".into()),
+    };
+    match result {
         Ok(report) => {
             print!("{report}");
             ExitCode::SUCCESS
@@ -85,15 +104,15 @@ impl std::fmt::Display for Report {
 /// Load the scene, list its bodies, run [`DURATION_S`] of sim time, and
 /// report the final `z` of [`BODY`] when there is one. Errors come back as
 /// a message. Nothing here panics on bad input.
-fn run(cli: &Cli) -> Result<Report, String> {
-    let sim = Sim::load(&cli.scene).map_err(|e| e.to_string())?;
+fn run(scene: &Path) -> Result<Report, String> {
+    let sim = Sim::load(scene).map_err(|e| e.to_string())?;
     let bodies: Vec<String> = sim.snapshot().bodies.into_iter().map(|b| b.name).collect();
     let body = sim.body_index(BODY);
     let dt = sim.timestep();
     if !dt.is_finite() || dt <= 0.0 {
         return Err(format!(
             "{}: timestep {dt} is not a positive number",
-            cli.scene.display()
+            scene.display()
         ));
     }
     // Rounded so 2.0 / 0.001 gives exactly 2,000 steps despite float error.
@@ -109,10 +128,8 @@ fn run(cli: &Cli) -> Result<Report, String> {
 mod tests {
     use super::*;
 
-    fn cli(rel: &str) -> Cli {
-        Cli {
-            scene: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(rel),
-        }
+    fn cli(rel: &str) -> PathBuf {
+        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(rel)
     }
 
     #[test]
@@ -135,7 +152,201 @@ mod tests {
     }
 
     #[test]
+    fn a_tour_engages_a_handle_and_returns_home_without_disturbing_any_box() {
+        let dir = std::env::temp_dir().join(format!("rookery-tour-test-{}", std::process::id()));
+        let script = dir.join("short.ron");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&script, "[Goto(Cell(3, 3)), Goto(Home)]").unwrap();
+        let args = tour_cmd::RunArgs {
+            script,
+            log: dir.clone(),
+            scene: cli("scene/generated/rookery.xml"),
+            id: Some("t".into()),
+        };
+        let report = tour_cmd::run(&args).expect("tour completes at home");
+        assert!(report.contains("Completed"), "{report}");
+        let csv = std::fs::read_to_string(dir.join("t/qpos.csv")).unwrap();
+        let rows: Vec<Vec<f64>> = csv
+            .lines()
+            .skip(1)
+            .map(|l| l.split(',').map(|v| v.parse().unwrap()).collect())
+            .collect();
+        let (first, last) = (&rows[0], &rows[rows.len() - 1]);
+        let nboxes = (first.len() - 1 - 4) / 7;
+        for b in 0..nboxes {
+            for k in 0..3 {
+                let i = 1 + 7 * b + k;
+                assert!(
+                    (last[i] - first[i]).abs() < 0.001,
+                    "box {b} moved {}",
+                    last[i] - first[i]
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn missing_scene_is_an_error_not_a_panic() {
         assert!(run(&cli("no/such.xml")).is_err());
+    }
+}
+
+/// `rookery run`: the Phase 3 demo.
+mod tour_cmd {
+    use std::fs::{self, File};
+    use std::io::BufWriter;
+    use std::num::NonZeroUsize;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use mast::kinematics::{self, shelf_windows};
+    use mast::{DONE_TOL, GantryState, SceneMeta};
+    use sim::Sim;
+
+    use crate::runner::Runner;
+    use crate::script;
+    use crate::tour::{Outcome, ScriptHooks};
+
+    /// Commands tick at 50 Hz (every 20 physics steps at 1 ms), the BT rate from Phase 4.
+    const TICK_HZ: f64 = 50.0;
+    /// Upper bound on a tour's sim time, seconds.
+    const MAX_SECONDS: f64 = 300.0;
+
+    #[derive(Debug, clap::Args)]
+    pub struct RunArgs {
+        /// Tour script (RON), e.g. examples/tour.ron
+        #[arg(long)]
+        pub script: PathBuf,
+        /// Directory for run logs: <log>/<run id>/{qpos.csv, commands.json, summary.json}
+        #[arg(long, default_value = "runs")]
+        pub log: PathBuf,
+        /// Scene to load. Its metadata is the .json beside it.
+        #[arg(long, default_value = "scene/generated/rookery.xml")]
+        pub scene: PathBuf,
+        /// Run id (default: tour-<unix seconds>)
+        #[arg(long)]
+        pub id: Option<String>,
+    }
+
+    pub fn run(args: &RunArgs) -> Result<String, String> {
+        let meta = SceneMeta::load(args.scene.with_extension("json")).map_err(|e| e.to_string())?;
+        let steps = script::load(&args.script)?;
+        let start = kinematics::home();
+        let cmds = script::expand(&steps, start, &meta)?;
+        let ncmds = cmds.len();
+
+        let mut sim = Sim::load(&args.scene).map_err(|e| e.to_string())?;
+        if sim.apply(&sim::Targets(vec![0.0; 4])).is_err() {
+            return Err(format!(
+                "{}: expected the four crane actuators",
+                args.scene.display()
+            ));
+        }
+        let dt_phys = sim.timestep();
+        let every = (1.0 / (TICK_HZ * dt_phys)).round().max(1.0) as usize;
+        let dt = every as f64 * dt_phys;
+
+        let id = args.id.clone().unwrap_or_else(|| {
+            let secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("tour-{secs}")
+        });
+        let dir = args.log.join(&id);
+        fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let qpos = BufWriter::new(File::create(dir.join("qpos.csv")).map_err(|e| e.to_string())?);
+
+        let state = GantryState {
+            targets: start,
+            windows: shelf_windows(&meta),
+        };
+        let hooks = ScriptHooks::new(&sim, state, cmds, &meta, dt, qpos)?;
+        let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
+        let mut runner = Runner::new(sim, hooks, every_nz);
+
+        let max_steps = (MAX_SECONDS / dt_phys) as usize;
+        let chunk = every * 50; // 1 s at a time
+        let mut stepped = 0;
+        while stepped < max_steps && !runner.hooks().finished() {
+            runner.run(chunk);
+            stepped += chunk;
+        }
+        runner.run(chunk); // 1 s more, so the final pose is settled and logged
+        runner.hooks_mut().close();
+
+        let hooks = runner.hooks();
+        if let Some(e) = hooks.io_error() {
+            return Err(format!("writing qpos.csv: {e}"));
+        }
+        let final_t = hooks.targets();
+        let b = runner.sim().snapshot();
+        let q = {
+            let id = |n: &str| runner.sim().body_index(n).expect("crane body");
+            [
+                b.bodies[id("crane_truck")].pos[1],
+                b.bodies[id("crane_carriage")].pos[2],
+                b.bodies[id("crane_arm")].pos[0] - meta.derived.rail_line_x,
+                b.bodies[id("crane_hook")].pos[2] - b.bodies[id("crane_carriage")].pos[2],
+            ]
+        };
+        let home = kinematics::home().0;
+        let err = q
+            .iter()
+            .zip(home)
+            .map(|(a, h)| (a - h).abs())
+            .fold(0.0, f64::max);
+        let outcome = hooks
+            .outcome
+            .clone()
+            .unwrap_or(Outcome::Unfinished { remaining: ncmds });
+        let at_home = err <= DONE_TOL;
+
+        fs::write(
+            dir.join("commands.json"),
+            serde_json::to_string_pretty(&hooks.log).map_err(|e| e.to_string())? + "\n",
+        )
+        .map_err(|e| e.to_string())?;
+        let summary = serde_json::json!({
+            "id": id,
+            "script": args.script.display().to_string(),
+            "scene": args.scene.display().to_string(),
+            "commands": ncmds,
+            "outcome": format!("{outcome:?}"),
+            "sim_time": b.time,
+            "final_q": q,
+            "final_targets": final_t.0,
+            "home": home,
+            "max_error_from_home": err,
+            "at_home": at_home,
+        });
+        fs::write(
+            dir.join("summary.json"),
+            serde_json::to_string_pretty(&summary).unwrap_or_default() + "\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        let report = format!(
+            "run {id}: {ncmds} commands, {outcome:?}, {:.2} s sim\n\
+             final q [{:.4}, {:.4}, {:.4}, {:.4}], max error from home {:.4} m ({})\n\
+             log {}\n",
+            b.time,
+            q[0],
+            q[1],
+            q[2],
+            q[3],
+            err,
+            if at_home {
+                "within tolerance"
+            } else {
+                "NOT within tolerance"
+            },
+            dir.display()
+        );
+        match (outcome, at_home) {
+            (Outcome::Completed, true) => Ok(report),
+            _ => Err(report),
+        }
     }
 }
