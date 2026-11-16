@@ -9,7 +9,7 @@ at the end:
     .header()      option, visual, assets, light, camera, ground   (2.3)
     .tray()        body tray_0: floor + 4 walls                    (2.3)
     .water()       geom water: translucent, contact-free           (2.3)
-    .cells()       box_r_c + handle_r_c                            (2.4)
+    .cells()       box_r_c + handle_r_c, row-major                 (2.4)
     .exit_tray()   geom exit_tray beside the rail                  (2.5)
     .build() -> str
 ```
@@ -41,6 +41,19 @@ TRAY_FREEBOARD = 0.03
 #: Water colour: translucent blue, so the boxes under it stay visible.
 WATER_RGBA = (0.25, 0.55, 0.85, 0.35)
 TRAY_RGBA = (0.55, 0.55, 0.58, 1.0)
+
+#: Mesh box: wall and floor thickness, total mass, colours.
+BOX_WALL = 0.003
+BOX_FLOOR = 0.004
+BOX_MASS = 0.12  # kg, an empty plastic mesh box
+BOX_RGBA = (0.85, 0.45, 0.15, 1.0)
+#: Hook handle: capsule radius and the radius of the two posts holding it.
+HANDLE_RADIUS = 0.006
+POST_RADIUS = 0.003
+HANDLE_RGBA = (0.9, 0.85, 0.2, 1.0)
+#: Contact margin on box walls, so neighbours and tray walls are seen
+#: slightly before they touch (no tunnelling at 1 ms).
+BOX_MARGIN = 0.001
 
 
 def num(*xs: float) -> str:
@@ -134,6 +147,64 @@ class MjcfBuilder:
         ])
         return self
 
+    def cells(self) -> MjcfBuilder:
+        """One mesh box per cell, emitted row-major: ``box_0_0, box_0_1, ...``.
+
+        Each is a body ``box_r_c`` on a free joint with its floor resting on
+        the tray floor (z = 0). It has four thin walls and a hook handle: a
+        capsule ``handle_r_c`` across the top along Y, whose top sits at
+        ``spec.handle_top_z``, held by two posts ``post_r_c_{yneg,ypos}``.
+
+        ```text
+              handle_r_c (capsule, along Y)   top at box_h + handle_height
+              ┌──────────────┐
+              │ post    post │
+          ┌───┴──────────────┴───┐  box top, z = box_h
+          │  walls ×4, mesh box  │
+          └──────────────────────┘  floor, z = 0 (on the tray floor)
+        ```
+        """
+        s = self.spec
+        w, d, h = s.box_size
+        hx, hy = w / 2, d / 2
+        t, f = BOX_WALL, BOX_FLOOR
+        parts = 1 + 4  # floor + walls share the mass evenly by count
+        m = BOX_MASS / parts
+        rgba = ("rgba", num(*BOX_RGBA))
+        handle_z = s.handle_top_z - HANDLE_RADIUS
+        handle_half = hy - t - HANDLE_RADIUS
+        post_half = (handle_z - h) / 2
+        for r in range(s.rows):
+            for c in range(s.cols):
+                x, y = s.cell_center(r, c)
+                tag = f"{r}_{c}"
+                body = self._el(self.worldbody, "body", [("name", f"box_{tag}"), ("pos", num(x, y, 0))])
+                self._el(body, "freejoint", [("name", f"box_{tag}_free")])
+                self._el(body, "geom", [("name", f"box_{tag}_floor"), ("type", "box"),
+                                        ("size", num(hx, hy, f / 2)), ("pos", num(0, 0, f / 2)),
+                                        ("mass", num(m)), rgba])
+                walls = (
+                    ("xneg", (-(hx - t / 2), 0), (t / 2, hy)),
+                    ("xpos", (hx - t / 2, 0), (t / 2, hy)),
+                    ("yneg", (0, -(hy - t / 2)), (hx - t, t / 2)),
+                    ("ypos", (0, hy - t / 2), (hx - t, t / 2)),
+                )
+                for side, (wx, wy), (sx, sy) in walls:
+                    self._el(body, "geom", [("name", f"box_{tag}_wall_{side}"), ("type", "box"),
+                                            ("size", num(sx, sy, (h - f) / 2)),
+                                            ("pos", num(wx, wy, f + (h - f) / 2)),
+                                            ("mass", num(m)), ("margin", num(BOX_MARGIN)), rgba])
+                for side, py in (("yneg", -handle_half), ("ypos", handle_half)):
+                    self._el(body, "geom", [("name", f"post_{tag}_{side}"), ("type", "cylinder"),
+                                            ("size", num(POST_RADIUS, post_half)),
+                                            ("pos", num(0, py, h + post_half)),
+                                            ("mass", num(0.002)), ("rgba", num(*HANDLE_RGBA))])
+                self._el(body, "geom", [("name", f"handle_{tag}"), ("type", "capsule"),
+                                        ("fromto", num(0, -handle_half, handle_z, 0, handle_half, handle_z)),
+                                        ("size", num(HANDLE_RADIUS)), ("mass", num(0.005)),
+                                        ("rgba", num(*HANDLE_RGBA))])
+        return self
+
     def build(self) -> str:
         """Serialise: two-space indent, a trailing newline, and no XML declaration or timestamp."""
         tree = ET.ElementTree(self.root)
@@ -143,4 +214,4 @@ class MjcfBuilder:
 
 def build_scene(spec: SceneSpec) -> str:
     """The farm scene for ``spec``, as far as the builder goes today."""
-    return MjcfBuilder(spec).header().tray().water().build()
+    return MjcfBuilder(spec).header().tray().water().cells().build()
