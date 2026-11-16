@@ -1,7 +1,9 @@
 //! `cargo run -p mast --example dump-limits` prints `limits.rs` as JSON.
-//! Row 3.2's pytest compares it with the MJCF joint ranges and fails on drift.
+//! Row 3.2's pytest compares it with the MJCF joint ranges, and row 4.1's
+//! with the builder's hook geometry and home pose; both fail on drift.
 //! Hand-formatted, so `mast` needs no serde for it.
 
+use mast::kinematics::{HANDLE_DIAMETER, HOME, HOOK_FINGER, HOOK_RADIUS, HOOK_TIP_RISE};
 use mast::limits::{ARM_RETRACTED, ARM_THICKNESS, MAX_VEL, RANGES, WORKSPACE};
 
 const JOINTS: [&str; 4] = ["rail_y", "mast_z", "arm_x", "hook_lift"];
@@ -23,6 +25,13 @@ fn main() {
         fmt3(WORKSPACE.max)
     );
     println!("  \"arm_thickness\": {ARM_THICKNESS:.6},");
-    println!("  \"arm_retracted\": {ARM_RETRACTED:.6}");
+    println!("  \"arm_retracted\": {ARM_RETRACTED:.6},");
+    // Hook geometry, which the scene builder duplicates (row 4.1 drift check).
+    println!(
+        "  \"hook\": {{\"finger\": {HOOK_FINGER:.6}, \"radius\": {HOOK_RADIUS:.6}, \
+         \"tip_rise\": {HOOK_TIP_RISE:.6}, \"handle_diameter\": {HANDLE_DIAMETER:.6}}},"
+    );
+    let h: Vec<String> = HOME.0.iter().map(|x| format!("{x:.6}")).collect();
+    println!("  \"home\": [{}]", h.join(", "));
     println!("}}");
 }

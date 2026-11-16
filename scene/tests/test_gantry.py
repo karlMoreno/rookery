@@ -11,7 +11,15 @@ import mujoco
 import pytest
 
 from scene import SceneSpec
-from scene.builder import GANTRY_HOME, GANTRY_RANGES, build_scene
+from scene.builder import (
+    GANTRY_HOME,
+    GANTRY_RANGES,
+    HANDLE_RADIUS,
+    HOOK_FINGER,
+    HOOK_RADIUS,
+    HOOK_TIP_RISE,
+    build_scene,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 JOINTS = ["rail_y", "mast_z", "arm_x", "hook_lift"]
@@ -38,8 +46,8 @@ def find_cargo():
     return None
 
 
-def test_mjcf_ranges_match_limits_rs():
-    """Drift check: the scene's joint ranges equal the Rust constants."""
+def dump_limits():
+    """`cargo run -p mast --example dump-limits` as JSON."""
     cargo = find_cargo()
     if cargo is None:
         if os.environ.get("CI"):
@@ -47,7 +55,23 @@ def test_mjcf_ranges_match_limits_rs():
         pytest.skip("cargo not found")
     out = subprocess.run([cargo, "run", "-q", "-p", "mast", "--example", "dump-limits"],
                          cwd=REPO, check=True, capture_output=True, text=True).stdout
-    rust = json.loads(out)["ranges"]
+    return json.loads(out)
+
+
+def test_hook_geometry_and_home_match_mast():
+    """Drift check (row 4.1): the builder's hook and home equal mast's constants."""
+    d = dump_limits()
+    hook = d["hook"]
+    assert HOOK_FINGER == pytest.approx(hook["finger"])
+    assert HOOK_RADIUS == pytest.approx(hook["radius"])
+    assert HOOK_TIP_RISE == pytest.approx(hook["tip_rise"])
+    assert 2 * HANDLE_RADIUS == pytest.approx(hook["handle_diameter"])
+    assert [GANTRY_HOME[j] for j in JOINTS] == pytest.approx(d["home"])
+
+
+def test_mjcf_ranges_match_limits_rs():
+    """Drift check: the scene's joint ranges equal the Rust constants."""
+    rust = dump_limits()["ranges"]
     m, _ = load()
     for name in JOINTS:
         j = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, name)

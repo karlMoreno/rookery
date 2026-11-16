@@ -31,6 +31,7 @@
 
 pub mod kinematics;
 pub mod limits;
+pub mod route;
 
 use serde::{Deserialize, Serialize};
 

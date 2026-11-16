@@ -82,6 +82,10 @@ HOOK_RGBA = (0.8, 0.2, 0.2, 1.0)
 #: Hook finger: radius and length along +X from the arm tip.
 HOOK_RADIUS = 0.004
 HOOK_FINGER = 0.04
+#: How far the hook's tip turns up above the finger. HOOK_*, HANDLE_RADIUS and
+#: GANTRY_HOME are duplicated in crates/mast/src/kinematics.rs; test_gantry.py
+#: fails on drift (row 4.1).
+HOOK_TIP_RISE = 0.015
 #: Half-section of the floor and guide rails, in metres.
 RAIL_HALF = 0.02
 RAIL_RGBA = (0.35, 0.37, 0.42, 1.0)
@@ -398,7 +402,7 @@ class MjcfBuilder:
         self._el(hook, "geom", [("name", "hook"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
                                 ("fromto", num(0, 0, 0, HOOK_FINGER, 0, 0)), hr])
         self._el(hook, "geom", [("name", "hook_tip"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
-                                ("fromto", num(HOOK_FINGER, 0, 0, HOOK_FINGER, 0, 0.015)), hr])
+                                ("fromto", num(HOOK_FINGER, 0, 0, HOOK_FINGER, 0, HOOK_TIP_RISE)), hr])
         self._el(hook, "geom", [("name", "hook_stem"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
                                 ("fromto", num(0, 0, 0, 0, 0, 0.02)), *free, hr])
 
