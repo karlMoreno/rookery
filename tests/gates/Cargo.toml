@@ -13,6 +13,8 @@ publish = false
 # Gates drive the crates through their public surfaces only.
 [dev-dependencies]
 sim = { path = "../../crates/sim" }
+mast = { path = "../../crates/mast" }
+proptest = "1"
 
 [lints]
 workspace = true

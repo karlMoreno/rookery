@@ -8,5 +8,9 @@ repository.workspace = true
 
 [dependencies]
 
+[[example]]
+name = "dump-limits"
+path = "examples/dump_limits.rs"
+
 [lints]
 workspace = true
