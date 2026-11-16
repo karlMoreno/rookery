@@ -39,6 +39,8 @@ jobs:
           echo "LD_LIBRARY_PATH=$dir/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
       - name: No unsafe outside crates/sim/src (rule 4)
         run: scripts/check-unsafe.sh
+      - name: mast builds and tests standalone (row 3.6)
+        run: scripts/standalone-mast.sh
       - name: mast does not depend on rookery-core (row 3.1)
         run: |
           if cargo tree -p mast -e normal | grep -q rookery-core; then
