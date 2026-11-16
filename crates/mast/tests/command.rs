@@ -2,7 +2,7 @@
 //! tick/undo, and CommandLog round-tripping through JSON.
 
 use mast::kinematics::shelf_windows;
-use mast::kinematics::{HANDLE_DIAMETER, HOOK_FINGER};
+use mast::kinematics::{HANDLE_DIAMETER, HOOK_ENVELOPE, HOOK_FINGER, HOOK_RADIUS};
 use mast::limits::{MAX_VEL, RANGES};
 use mast::{
     Axis, CmdStatus, Command, CommandLog, GantryObs, GantryState, Hook, JointTargets, MastError,
@@ -63,9 +63,14 @@ fn corner_cells_put_the_handle_over_mid_finger() {
         let box_top = m.box_size[2];
         let handle_bottom = box_top + m.handle_height - HANDLE_DIAMETER;
         let z = p.0[Axis::MastZ.index()];
+        // The whole hook (finger underside to tip top) fits between them.
         assert!(
-            box_top < z && z < handle_bottom,
-            "({r},{c}) z {z} not between box top and handle"
+            box_top < z - HOOK_RADIUS,
+            "({r},{c}) finger hits the box wall"
+        );
+        assert!(
+            z - HOOK_RADIUS + HOOK_ENVELOPE < handle_bottom,
+            "({r},{c}) tip hits the handle"
         );
         assert_eq!(p.0[Axis::HookLift.index()], 0.0);
         for (i, v) in p.0.iter().enumerate() {
@@ -80,6 +85,15 @@ fn corner_cells_put_the_handle_over_mid_finger() {
     assert!(close(p00.0[0], -0.225) && close(p00.0[1], 0.089));
     let p33 = cell_pose(3, 3, &m).unwrap();
     assert!(close(p33.0[0], 0.225) && close(p33.0[2], 0.225 - rail - 0.02));
+}
+
+#[test]
+fn the_hook_fits_under_a_handle_with_room_to_spare() {
+    assert!(
+        meta().hook_clearance() >= 0.004,
+        "{}",
+        meta().hook_clearance()
+    );
 }
 
 #[test]

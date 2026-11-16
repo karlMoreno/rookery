@@ -74,8 +74,12 @@ class SceneSpec:
     water_depth: float = 0.05
     #: Outer size of one mesh box: (width X, depth Y, height Z).
     box_size: tuple[float, float, float] = (0.12, 0.12, 0.08)
-    #: How far the hook's handle rises above the top of a box.
-    handle_height: float = 0.03
+    #: How far the hook's handle rises above the top of a box. 4.5 cm leaves a
+    #: 3.3 cm gap under the handle (12 mm capsule), so the J-hook (8 mm finger
+    #: with a 15 mm upturned tip, a 23 mm envelope) slides under it with 5 mm
+    #: to spare above and below. At 3 cm the gap was 18 mm and the tip struck
+    #: the handle (found running the row 3.5 tour).
+    handle_height: float = 0.045
     #: Clear vertical space between the top of a tray's handles and the
     #: underside of the tray above it. Matters once ``trays > 1`` (Phase 10).
     shelf_gap: float = 0.08

@@ -15,7 +15,8 @@
 //!   │        box_r_c       │
 //!   └──────────────────────┘    z = 0 (tray floor)
 //!
-//!   mast_z (engage) = midway between the box top and the handle bottom
+//!   mast_z (engage) = the hook envelope (finger + upturned tip) centred
+//!                     between the box top and the handle bottom
 //!   arm_x           = cell_x − rail_line_x − HOOK_FINGER / 2   (handle over mid-finger)
 //!   rail_y          = cell_y
 //! ```
@@ -37,6 +38,14 @@ pub const HOOK_FINGER: f64 = 0.04;
 /// Handle capsule diameter, metres. Matches `2 * HANDLE_RADIUS` in
 /// `scene/scene/builder.py`.
 pub const HANDLE_DIAMETER: f64 = 0.012;
+/// Hook capsule radius, metres. Matches `HOOK_RADIUS` in the builder.
+pub const HOOK_RADIUS: f64 = 0.004;
+/// How far the hook's tip turns up above the finger's centreline, metres.
+/// Matches the `hook_tip` geom in the builder.
+pub const HOOK_TIP_RISE: f64 = 0.015;
+/// The hook's vertical envelope, from the finger's underside to the top of
+/// the tip: 23 mm. It must fit the gap between a box's top and its handle.
+pub const HOOK_ENVELOPE: f64 = 2.0 * HOOK_RADIUS + HOOK_TIP_RISE;
 /// Home pose (rail_y, mast_z, arm_x, hook_lift). Matches `GANTRY_HOME` in
 /// `scene/scene/builder.py`, which is the MJCF `ref` and the `home` keyframe.
 pub const HOME: JointTargets = JointTargets([0.0, 0.45, 0.0, 0.0]);
@@ -100,12 +109,20 @@ impl SceneMeta {
         (x, y)
     }
 
-    /// Hook height that puts the finger midway between the box top and the
-    /// handle's underside, for a box resting at `base_z`.
+    /// Hook height (finger centreline) that centres the hook's whole
+    /// envelope, finger and upturned tip, in the gap between the box top and
+    /// the handle's underside, for a box resting at `base_z`.
     fn engage_z(&self, base_z: f64) -> f64 {
         let box_top = base_z + self.box_size[2];
         let handle_bottom = box_top + self.handle_height - HANDLE_DIAMETER;
-        (box_top + handle_bottom) / 2.0
+        let centre = (box_top + handle_bottom) / 2.0;
+        centre - HOOK_ENVELOPE / 2.0 + HOOK_RADIUS
+    }
+
+    /// Clearance left above and below the hook's envelope under a handle, in
+    /// metres. Negative means the hook does not fit.
+    pub fn hook_clearance(&self) -> f64 {
+        (self.handle_height - HANDLE_DIAMETER - HOOK_ENVELOPE) / 2.0
     }
 
     fn arm_for(&self, x: f64) -> f64 {
