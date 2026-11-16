@@ -74,8 +74,14 @@ jobs:
       - run: uv sync --frozen
         working-directory: scene
       - run: cargo test -p gates
+      - name: Software OpenGL for offscreen renders
+        run: sudo apt-get update -q && sudo apt-get install -y -q libosmesa6
       - name: Scene unit tests
         working-directory: scene
+        env:
+          # OSMesa renders on the CPU, so render tests run on a runner with no GPU or display.
+          MUJOCO_GL: osmesa
+          PYOPENGL_PLATFORM: osmesa
         run: uv run pytest tests -q
       - name: Python gates
         working-directory: scene

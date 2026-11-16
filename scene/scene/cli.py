@@ -1,17 +1,18 @@
 """Command line for the scene Builder: ``uv run python -m scene.cli --help``.
 
-The CLI only turns flags into a ``SceneSpec``, so every check lives in the
-spec, and the CLI and the tests can't disagree. Until the builder lands
-(row 2.3) it validates the spec, prints it, and writes nothing.
+The CLI only turns flags into a ``SceneSpec`` and hands it to the builder,
+so every check lives in the spec, and the CLI and the tests can't disagree.
+From row 2.3 it writes the MJCF to ``--out``. The scene so far is the tray
+and the water; boxes come in 2.4 and the exit tray in 2.5.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
+from .builder import build_scene
 from .spec import PRESETS, SceneSpec, SpecError
 
 #: Where the farm scene goes by default. Resolved against this file rather
@@ -52,10 +53,14 @@ def main(argv: list[str] | None = None) -> int:
     except SpecError as e:
         print(f"scene: {e}", file=sys.stderr)
         return 2
-    print(f"scene: spec ok ({spec.rows}x{spec.cols} cells, {spec.trays} tray(s)); "
-          f"builder lands in row 2.3, nothing written to {args.out.resolve()}")
-    for k, v in asdict(spec).items():
-        print(f"  {k} = {v!r}")
+    if spec.preset is not None:
+        print(f"scene: preset {spec.preset!r} arrives in row 2.7", file=sys.stderr)
+        return 2
+    out = args.out.resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # newline="\n": the same bytes on every OS (gate assertion 4).
+    out.write_text(build_scene(spec), encoding="utf-8", newline="\n")
+    print(f"scene: wrote {out} ({spec.rows}x{spec.cols} cells, {spec.trays} tray(s))")
     return 0
 
 
