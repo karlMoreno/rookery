@@ -1,14 +1,20 @@
 //! `rookery`: the binary that wires the crates together.
 //!
-//! Phase 1 demo: `cargo run -p rookery -- examples/drop.xml` loads the scene,
-//! runs 2 s of sim time headless through the [`runner::Runner`] (pattern:
-//! **Template Method**, see `runner.rs`) with [`runner::NoHooks`], and prints
-//! the final height of body `box`.
+//! `cargo run -p rookery -- <scene.xml>` loads a scene, prints its body count
+//! and body names, and runs 2 s of sim time headless through the
+//! [`runner::Runner`] (pattern: **Template Method**, see `runner.rs`) with
+//! [`runner::NoHooks`]. If the scene has a body named `box` (the Phase 1 drop
+//! scene), it then prints that body's final height.
+//!
+//! - Phase 2 demo: `rookery scene/generated/rookery.xml` gives `nbody 18`
+//!   (world, tray_0, 16 boxes; the exit tray and rails are world geoms).
+//! - Phase 1 demo: `rookery examples/drop.xml` ends with `box z 0.049892`.
 //!
 //! ```text
-//!   main ──▶ Sim::load(scene) ──▶ Runner::new(sim, NoHooks, 1) ──▶ run(2 s / timestep)
-//!                                                                    │
-//!                          println!("{z}") ◀── snapshot().bodies[box].pos[2]
+//!   main ──▶ Sim::load(scene) ──▶ snapshot().bodies → names
+//!                └─▶ Runner::new(sim, NoHooks, 1) ──▶ run(2 s / timestep)
+//!                                                       │
+//!   print Report { nbody, bodies, box z? } ◀────────────┘
 //! ```
 
 mod runner;
@@ -24,7 +30,7 @@ use runner::{NoHooks, Runner};
 
 /// Sim time the Phase 1 demo runs for, in seconds.
 const DURATION_S: f64 = 2.0;
-/// The body whose height the demo prints.
+/// The body whose height the Phase 1 demo prints, when the scene has one.
 const BODY: &str = "box";
 
 #[derive(Debug, Parser)]
@@ -37,8 +43,8 @@ struct Cli {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(&cli) {
-        Ok(z) => {
-            println!("{z:.6}");
+        Ok(report) => {
+            print!("{report}");
             ExitCode::SUCCESS
         }
         Err(msg) => {
@@ -48,13 +54,40 @@ fn main() -> ExitCode {
     }
 }
 
-/// Load, run for [`DURATION_S`], and return the final `z` of [`BODY`].
-/// Errors come back as a message; nothing here panics on bad input.
-fn run(cli: &Cli) -> Result<f64, String> {
+/// What one run prints, built as a value so `run` stays free of I/O and
+/// testable.
+///
+/// ```text
+///   nbody 18
+///   bodies world tray_0 box_0_0 ... box_3_3
+///   box z 0.049892        (only when the scene has a body named `box`)
+/// ```
+#[derive(Debug)]
+struct Report {
+    /// Body names in MuJoCo id order, `world` first.
+    bodies: Vec<String>,
+    /// Final `z` of [`BODY`], if the scene has one (the Phase 1 demo).
+    box_z: Option<f64>,
+}
+
+impl std::fmt::Display for Report {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "nbody {}", self.bodies.len())?;
+        writeln!(f, "bodies {}", self.bodies.join(" "))?;
+        if let Some(z) = self.box_z {
+            writeln!(f, "{BODY} z {z:.6}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Load the scene, list its bodies, run [`DURATION_S`] of sim time, and
+/// report the final `z` of [`BODY`] when there is one. Errors come back as
+/// a message. Nothing here panics on bad input.
+fn run(cli: &Cli) -> Result<Report, String> {
     let sim = Sim::load(&cli.scene).map_err(|e| e.to_string())?;
-    let body = sim
-        .body_index(BODY)
-        .ok_or_else(|| format!("{}: no body named `{BODY}`", cli.scene.display()))?;
+    let bodies: Vec<String> = sim.snapshot().bodies.into_iter().map(|b| b.name).collect();
+    let body = sim.body_index(BODY);
     let dt = sim.timestep();
     if !dt.is_finite() || dt <= 0.0 {
         return Err(format!(
@@ -67,5 +100,41 @@ fn run(cli: &Cli) -> Result<f64, String> {
 
     let mut runner = Runner::new(sim, NoHooks, NonZeroUsize::MIN);
     runner.run(steps);
-    Ok(runner.sim().snapshot().bodies[body].pos[2])
+    let box_z = body.map(|i| runner.sim().snapshot().bodies[i].pos[2]);
+    Ok(Report { bodies, box_z })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cli(rel: &str) -> Cli {
+        Cli {
+            scene: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(rel),
+        }
+    }
+
+    #[test]
+    fn generated_farm_lists_world_tray_and_sixteen_boxes() {
+        let r = run(&cli("scene/generated/rookery.xml")).expect("generated scene loads");
+        assert_eq!(r.bodies[0], "world");
+        assert!(r.bodies.iter().any(|b| b == "tray_0"));
+        let boxes = r.bodies.iter().filter(|b| b.starts_with("box_")).count();
+        assert_eq!(boxes, 16);
+        assert_eq!(r.box_z, None, "the farm has no body named `box`");
+    }
+
+    #[test]
+    fn drop_scene_still_prints_the_phase1_height() {
+        let r = run(&cli("examples/drop.xml")).expect("drop.xml loads");
+        assert_eq!(r.bodies, ["world", "box"]);
+        let z = r.box_z.expect("drop.xml has `box`");
+        assert!((z - 0.05).abs() < 0.001, "z = {z}");
+        assert!(r.to_string().ends_with(&format!("box z {z:.6}\n")));
+    }
+
+    #[test]
+    fn missing_scene_is_an_error_not_a_panic() {
+        assert!(run(&cli("no/such.xml")).is_err());
+    }
 }

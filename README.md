@@ -13,8 +13,20 @@ Lua (behaviors), Python (scene generation, video).
 
 ## Run
 
-Phase 1 demo. This drops a 0.1 m box onto a plane, runs 2 s headless, and prints the box's final height (about 0.05):
+`rookery <scene.xml>` prints the body count and names, then runs 2 s headless.
+
+Phase 1 demo. This drops a 0.1 m box onto a plane, and the last line is the box's final height (`box z 0.049892`):
 
 ```bash
 cargo run -p rookery -- examples/drop.xml
+```
+
+Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray and the crane rails), then loads it (`nbody 18`: world, tray_0 and 16 boxes):
+
+```bash
+(cd scene && uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08)
+```
+
+```bash
+cargo run -p rookery -- scene/generated/rookery.xml
 ```
