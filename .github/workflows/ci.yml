@@ -78,10 +78,14 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
         working-directory: scene
+      # A red Rust gate (normal at the start of a phase) must not hide the
+      # scene checks below, so they run unless the job was cancelled.
       - run: cargo test -p gates
       - name: Software OpenGL for offscreen renders
+        if: ${{ !cancelled() }}
         run: sudo apt-get update -q && sudo apt-get install -y -q libosmesa6
       - name: Scene unit tests
+        if: ${{ !cancelled() }}
         working-directory: scene
         env:
           # OSMesa renders on the CPU, so render tests run on a runner with no GPU or display.
@@ -89,14 +93,17 @@ jobs:
           PYOPENGL_PLATFORM: osmesa
         run: uv run pytest tests -q
       - name: Generated scenes are up to date (rule 7; row 2.7)
+        if: ${{ !cancelled() }}
         working-directory: scene
         run: uv run python -m scene.cli --check
       - name: Scene sha256 (must match the Air; row 2.5)
+        if: ${{ !cancelled() }}
         working-directory: scene
         run: |
           uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08 --out "$RUNNER_TEMP/scene/rookery.xml"
           sha256sum "$RUNNER_TEMP"/scene/rookery.xml "$RUNNER_TEMP"/scene/rookery.json
       - name: Python gates
+        if: ${{ !cancelled() }}
         working-directory: scene
         # pytest exits 5 when it collects no tests, which is expected until 2.2 lands.
         # -c: the args live outside scene/, so pytest would not find scene's
