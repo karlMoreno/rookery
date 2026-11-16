@@ -29,6 +29,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 use crate::JointTargets;
+use crate::limits::{MAST_Z, Range, ShelfWindows};
 
 /// Hook finger length along +X from the arm tip, metres. Matches
 /// `HOOK_FINGER` in `scene/scene/builder.py`.
@@ -126,6 +127,29 @@ pub fn cell_pose(r: usize, c: usize, meta: &SceneMeta) -> Option<JointTargets> {
 pub fn exit_pose(meta: &SceneMeta) -> JointTargets {
     let [x, y, z] = meta.derived.exit_pose;
     JointTargets([y, meta.engage_z(z), meta.arm_for(x), 0.0])
+}
+
+/// Shelf windows for the scene: the mast heights at which the arm may
+/// extend over a tray.
+///
+/// Phase 3 has one tray and nothing above it, so there is one window from
+/// just above the box walls (box top + [`HOOK_CLEARANCE`], so the finger
+/// clears the walls as it slides in) to the top of the mast. Phase 10 adds a
+/// window per shelf, capped by the underside of the shelf above.
+pub fn shelf_windows(meta: &SceneMeta) -> ShelfWindows {
+    let lo = meta.box_size[2] + HOOK_CLEARANCE;
+    ShelfWindows(vec![Range::new(lo, MAST_Z.hi)])
+}
+
+/// Gap kept between the hook finger's centreline and a box's wall top when
+/// the arm is out: the finger radius (4 mm) plus 1 mm, metres.
+pub const HOOK_CLEARANCE: f64 = 0.005;
+
+/// Where the hook is in the scene frame for `t`: `(rail_line_x + arm_x,
+/// rail_y, mast_z + hook_lift)`. Used to check `limits::WORKSPACE`.
+pub fn forward(t: &JointTargets, meta: &SceneMeta) -> [f64; 3] {
+    let [y, z, x, h] = t.0;
+    [meta.derived.rail_line_x + x, y, z + h]
 }
 
 /// The home pose: truck centred, carriage at 0.45 m, arm retracted, hook down.
