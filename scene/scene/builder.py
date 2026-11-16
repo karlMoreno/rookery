@@ -12,6 +12,7 @@ at the end:
     .cells()       box_r_c + handle_r_c, row-major                 (2.4)
     .exit_tray()   geom exit_tray between tray and rail            (2.5)
     .crane_frame() floor_rail + guide_rail (static, contact-free)  (2.5)
+    .gantry()      rail_y → mast_z → arm_x → hook_lift, actuators   (3.2)
   MjcfBuilder(spec).drop().build()   the Phase 1 scene, --preset drop (2.7)
     .build() -> str
 ```
@@ -59,6 +60,28 @@ EXIT_RGBA = (0.2, 0.6, 0.3, 1.0)
 #: Drop preset: cube edge and release height, in metres (Phase 1 gate: rest at DROP_BOX / 2).
 DROP_BOX = 0.1
 DROP_HEIGHT = 0.5
+#: Crane joint ranges in metres, COPIED from crates/mast/src/limits.rs
+#: (protected). scene/tests/test_gantry.py runs `cargo run -p mast --example
+#: dump-limits` and fails if these drift from the Rust constants.
+GANTRY_RANGES = {
+    "rail_y": (-0.40, 0.40),
+    "mast_z": (0.05, 0.80),
+    "arm_x": (0.00, 0.85),
+    "hook_lift": (0.00, 0.03),
+}
+#: Home pose (joint values), the same order as GANTRY_RANGES: truck centred,
+#: carriage at 0.45 m (the preview's home_mast), arm retracted, hook down.
+GANTRY_HOME = {"rail_y": 0.0, "mast_z": 0.45, "arm_x": 0.0, "hook_lift": 0.0}
+#: Position-actuator gains. With dampratio=1 each axis is critically damped,
+#: so a 0.3 m step settles in under 1 s with no overshoot (test_gantry.py).
+GANTRY_KP = {"rail_y": 600.0, "mast_z": 300.0, "arm_x": 200.0, "hook_lift": 100.0}
+#: Moving masses, kg: truck, lift carriage, arm, hook.
+GANTRY_MASS = {"rail_y": 5.0, "mast_z": 1.0, "arm_x": 0.5, "hook_lift": 0.1}
+CRANE_RGBA = (0.85, 0.75, 0.2, 1.0)
+HOOK_RGBA = (0.8, 0.2, 0.2, 1.0)
+#: Hook finger: radius and length along +X from the arm tip.
+HOOK_RADIUS = 0.004
+HOOK_FINGER = 0.04
 #: Half-section of the floor and guide rails, in metres.
 RAIL_HALF = 0.02
 RAIL_RGBA = (0.35, 0.37, 0.42, 1.0)
@@ -90,19 +113,23 @@ class MjcfBuilder:
     def __init__(self, spec: SceneSpec) -> None:
         self.spec = spec
         self.root = ET.Element("mujoco", {"model": "rookery"})
-        self._names: set[str] = set()
+        # MuJoCo keeps one namespace per object type (a joint and its actuator
+        # may share a name), so names are unique per kind of element.
+        self._names: set[tuple[str, str]] = set()
         self._worldbody: ET.Element | None = None
 
     # ---------------- helpers ----------------
 
     def _el(self, parent: ET.Element, tag: str, attrs: Iterable[tuple[str, str]] = ()) -> ET.Element:
-        """Append ``<tag>`` with attributes in exactly the given order. Names must be unique."""
+        """Append ``<tag>`` with attributes in exactly the given order. Names must
+        be unique within their MuJoCo namespace (all actuator types share one)."""
         el = ET.SubElement(parent, tag)
+        kind = "actuator" if parent.tag == "actuator" else ("joint" if tag == "freejoint" else tag)
         for k, v in attrs:
             if k == "name":
-                if v in self._names:
-                    raise ValueError(f"duplicate MJCF name {v!r}")
-                self._names.add(v)
+                if (kind, v) in self._names:
+                    raise ValueError(f"duplicate MJCF {kind} name {v!r}")
+                self._names.add((kind, v))
             el.set(k, v)
         return el
 
@@ -292,6 +319,98 @@ class MjcfBuilder:
         self._el(body, "geom", [("name", "box_geom"), ("type", "box"), ("size", num(h, h, h)), ("mass", num(1))])
         return self
 
+    def gantry(self) -> MjcfBuilder:
+        """The stacker crane: four nested slide joints on the floor rail (row 3.2).
+
+        ```text
+          worldbody
+            crane_truck     slide rail_y    (Y)  on the floor rail at rail_line_x
+              crane_carriage slide mast_z   (Z)  q = hook height above the tray floor
+                crane_arm    slide arm_x    (X)  q = hook x - rail_line_x
+                  crane_hook slide hook_lift (Z) the J-hook's short stroke
+        ```
+
+        Each joint's value *is* the coordinate that `limits.rs` speaks in.
+        Every body starts at the home pose with ``ref`` equal to its home value,
+        so MuJoCo's qpos0 is home and the joint value equals the coordinate.
+        Ranges come from ``GANTRY_RANGES`` (a copy of `limits.rs`, checked by a
+        test). ``gravcomp="1"`` cancels gravity on the moving bodies, so the
+        position actuators do not sag (settled in 3.1). Only the hook
+        collides; the truck, mast and arm are drawn without contact, as in
+        the preview.
+
+        Keyframe ``home`` holds the actuators at home. Load it with
+        ``mj_resetDataKeyframe``, or the controls start at zero.
+        """
+        s = self.spec
+        h = GANTRY_HOME
+        g = -TRAY_WALL  # ground plane height
+        free = [("contype", "0"), ("conaffinity", "0")]
+        rgba = ("rgba", num(*CRANE_RGBA))
+
+        def joint(body: ET.Element, name: str, axis: tuple[float, float, float]) -> None:
+            lo, hi = GANTRY_RANGES[name]
+            self._el(body, "joint", [("name", name), ("type", "slide"), ("axis", num(*axis)),
+                                     ("range", num(lo, hi)), ("limited", "true"), ("ref", num(h[name])),
+                                     ("damping", num(5.0)), ("armature", num(0.05))])
+
+        def inertial(body: ET.Element, name: str) -> None:
+            self._el(body, "inertial", [("pos", num(0, 0, 0)), ("mass", num(GANTRY_MASS[name])),
+                                        ("diaginertia", num(0.01, 0.01, 0.01))])
+
+        truck = self._el(self.worldbody, "body", [("name", "crane_truck"),
+                                                  ("pos", num(s.rail_line_x, h["rail_y"], 0)),
+                                                  ("gravcomp", "1")])
+        joint(truck, "rail_y", (0, 1, 0))
+        inertial(truck, "rail_y")
+        self._el(truck, "geom", [("name", "crane_truck_body"), ("type", "box"),
+                                 ("size", num(0.06, 0.08, 0.03)), ("pos", num(0, 0, g + 2 * RAIL_HALF + 0.03)),
+                                 *free, rgba])
+        mast_half = (s.guide_rail_height - g) / 2
+        self._el(truck, "geom", [("name", "crane_mast"), ("type", "box"),
+                                 ("size", num(0.025, 0.025, mast_half)),
+                                 ("pos", num(-0.04, 0, g + mast_half)), *free, rgba])
+
+        carriage = self._el(truck, "body", [("name", "crane_carriage"), ("pos", num(0, 0, h["mast_z"])),
+                                            ("gravcomp", "1")])
+        joint(carriage, "mast_z", (0, 0, 1))
+        inertial(carriage, "mast_z")
+        self._el(carriage, "geom", [("name", "crane_carriage_body"), ("type", "box"),
+                                    ("size", num(0.03, 0.05, 0.03)), ("pos", num(-0.01, 0, 0.02)), *free, rgba])
+
+        arm = self._el(carriage, "body", [("name", "crane_arm"), ("pos", num(h["arm_x"], 0, 0)),
+                                          ("gravcomp", "1")])
+        joint(arm, "arm_x", (1, 0, 0))
+        inertial(arm, "arm_x")
+        reach = GANTRY_RANGES["arm_x"][1]
+        # The beam trails back from the tip far enough to stay in the carriage at full reach.
+        self._el(arm, "geom", [("name", "crane_arm_beam"), ("type", "box"),
+                               ("size", num((reach + 0.05) / 2, 0.012, 0.01)),
+                               ("pos", num(-(reach + 0.05) / 2, 0, 0.02)), *free, rgba])
+
+        hook = self._el(arm, "body", [("name", "crane_hook"), ("pos", num(0, 0, h["hook_lift"])),
+                                      ("gravcomp", "1")])
+        joint(hook, "hook_lift", (0, 0, 1))
+        inertial(hook, "hook_lift")
+        hr = ("rgba", num(*HOOK_RGBA))
+        # J-hook: a finger along +X at hook height with an upturned tip, so it
+        # slides under a handle (a capsule along Y) and catches it when lifted.
+        self._el(hook, "geom", [("name", "hook"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
+                                ("fromto", num(0, 0, 0, HOOK_FINGER, 0, 0)), hr])
+        self._el(hook, "geom", [("name", "hook_tip"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
+                                ("fromto", num(HOOK_FINGER, 0, 0, HOOK_FINGER, 0, 0.015)), hr])
+        self._el(hook, "geom", [("name", "hook_stem"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
+                                ("fromto", num(0, 0, 0, 0, 0, 0.02)), *free, hr])
+
+        actuator = self._el(self.root, "actuator")
+        for name in GANTRY_RANGES:
+            lo, hi = GANTRY_RANGES[name]
+            self._el(actuator, "position", [("name", name), ("joint", name), ("kp", num(GANTRY_KP[name])),
+                                            ("dampratio", num(1)), ("ctrlrange", num(lo, hi))])
+        keyframe = self._el(self.root, "keyframe")
+        self._el(keyframe, "key", [("name", "home"), ("ctrl", num(*(h[n] for n in GANTRY_RANGES)))])
+        return self
+
     def build(self) -> str:
         """Serialise: two-space indent, a trailing newline, and no XML declaration or timestamp."""
         tree = ET.ElementTree(self.root)
@@ -312,7 +431,7 @@ def build_scene(spec: SceneSpec) -> str:
     """The scene for ``spec``: the named preset, or else the farm."""
     if spec.preset == "drop":
         return MjcfBuilder(spec).drop().build()
-    return MjcfBuilder(spec).header().tray().water().cells().exit_tray().crane_frame().build()
+    return MjcfBuilder(spec).header().tray().water().cells().exit_tray().crane_frame().gantry().build()
 
 
 def spec_from_json(text: str) -> SceneSpec:
