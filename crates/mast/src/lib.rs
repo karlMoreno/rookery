@@ -64,10 +64,14 @@ impl Axis {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct JointTargets(pub [f64; 4]);
 
-/// What the crane is currently commanded to do.
+/// What the crane is currently commanded to do, and the shelf windows its
+/// commands must respect. Every target a [`Command`] writes goes through
+/// [`clamp`] with these windows (row 3.4). Build them from the scene with
+/// [`kinematics::shelf_windows`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GantryState {
     pub targets: JointTargets,
+    pub windows: ShelfWindows,
 }
 
 /// What the crane observes, filled by the Integrator from the sim snapshot,
@@ -87,6 +91,9 @@ pub enum MastError {
     Timeout { axis: Axis },
     /// The goal lies outside the joint's range in [`limits`].
     OutOfRange { axis: Axis, goal: f64 },
+    /// [`clamp`] held the axis (the shelf rule) for longer than
+    /// [`SETTLE_TIMEOUT`], so the move cannot make progress from here.
+    Blocked { axis: Axis },
 }
 
 impl std::fmt::Display for MastError {
@@ -96,6 +103,7 @@ impl std::fmt::Display for MastError {
             Self::OutOfRange { axis, goal } => {
                 write!(f, "{axis:?} goal {goal} is outside its range")
             }
+            Self::Blocked { axis } => write!(f, "{axis:?} is held by the shelf rule"),
         }
     }
 }
@@ -143,6 +151,9 @@ pub struct MoveCommand {
     /// reached `goal`. Not logged.
     #[serde(skip)]
     settling: u32,
+    /// Ticks in a row on which `clamp` let the target make no progress. Not logged.
+    #[serde(skip)]
+    blocked: u32,
 }
 
 /// How long a [`MoveCommand`] waits for the measured position to settle
@@ -158,6 +169,7 @@ impl MoveCommand {
             goal,
             start: None,
             settling: 0,
+            blocked: 0,
         }
     }
 
@@ -180,18 +192,23 @@ impl Command for MoveCommand {
         let current = st.targets.0[i];
         self.start.get_or_insert(current);
 
-        // Step the target toward the goal by at most MAX_VEL · dt. Row 3.4
-        // routes this through `clamp` (range, rate, shelf windows); until
-        // then the command keeps to its own axis's rate limit.
-        let max_step = limits::MAX_VEL[i] * dt.max(0.0);
-        let delta = (self.goal - current).clamp(-max_step, max_step);
-        st.targets.0[i] = if (self.goal - current).abs() <= max_step {
-            self.goal // land exactly on the goal, with no float residue
-        } else {
-            current + delta
-        };
+        // Ask for the goal outright and let `clamp` do the rest: range,
+        // MAX_VEL · dt, and the shelf rule (row 3.4). Within one step, clamp
+        // passes the goal through untouched, so the target lands on it exactly.
+        let prev = st.targets;
+        let mut want = prev;
+        want.0[i] = self.goal;
+        st.targets = clamp(&prev, want, dt, &st.windows);
 
         if st.targets.0[i] != self.goal {
+            if st.targets.0[i] == current && dt > 0.0 {
+                self.blocked += 1;
+                if f64::from(self.blocked) * dt > SETTLE_TIMEOUT {
+                    return CmdStatus::Failed(MastError::Blocked { axis: self.axis });
+                }
+            } else {
+                self.blocked = 0;
+            }
             return CmdStatus::Running;
         }
         // The target is at the goal. Done once the measured joint agrees,
@@ -289,12 +306,61 @@ impl Hook for PassiveHook {
 /// at `prev`. The arm is never snapped to `ARM_RETRACTED`, because that could
 /// move it faster than `MAX_VEL · dt`. The arm may only extend once the mast
 /// is already in a window.
+///
+/// A non-finite `next` value (NaN, ±∞) is treated as "stay at `prev`", and
+/// a negative or non-finite `dt` as 0, so nothing moves.
+///
+/// ```text
+///   next ──range──▶ ──rate (|Δ| ≤ MAX_VEL·dt)──▶ ──shelf rule──▶ out
+///                                                 arm out & not admitted?
+///                                                   prev arm out → hold mast_z, hook_lift at prev
+///                                                   prev arm in  → arm stops at ARM_RETRACTED
+/// ```
 pub fn clamp(
     prev: &JointTargets,
     next: JointTargets,
     dt: f64,
     windows: &ShelfWindows,
 ) -> JointTargets {
-    let _ = (prev, next, dt, windows);
-    todo!("row 3.4: range, velocity and shelf-window clamps")
+    use limits::{ARM_RETRACTED, MAX_VEL, RANGES};
+    let dt = if dt.is_finite() && dt > 0.0 { dt } else { 0.0 };
+    let mut out = *prev;
+    for i in 0..4 {
+        let p = prev.0[i];
+        let n = next.0[i];
+        let n = if n.is_finite() {
+            n.clamp(RANGES[i].lo, RANGES[i].hi)
+        } else {
+            p
+        };
+        let max = MAX_VEL[i] * dt;
+        // Pass `n` through unchanged when it is within one step, so a goal
+        // inside the step is hit exactly, with no float residue.
+        out.0[i] = if (n - p).abs() <= max {
+            n
+        } else {
+            p + max.copysign(n - p)
+        };
+    }
+
+    let (z, x, h) = (
+        Axis::MastZ.index(),
+        Axis::ArmX.index(),
+        Axis::HookLift.index(),
+    );
+    if out.0[x] > ARM_RETRACTED && !windows.admits(out.0[z], out.0[h]) {
+        if prev.0[x] > ARM_RETRACTED {
+            // The arm is already out, so prev is admitted (the invariant).
+            // Refuse the mast and lift moves that would leave the window.
+            // Holding them is always within the rate bound.
+            out.0[z] = prev.0[z];
+            out.0[h] = prev.0[h];
+        } else {
+            // The arm wants to extend outside a window: let it go no
+            // further than retracted. prev ≤ ARM_RETRACTED < out, so this
+            // step is shorter than the one the rate clamp allowed.
+            out.0[x] = ARM_RETRACTED;
+        }
+    }
+    out
 }
