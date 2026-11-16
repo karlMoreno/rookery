@@ -12,6 +12,7 @@ at the end:
     .cells()       box_r_c + handle_r_c, row-major                 (2.4)
     .exit_tray()   geom exit_tray between tray and rail            (2.5)
     .crane_frame() floor_rail + guide_rail (static, contact-free)  (2.5)
+  MjcfBuilder(spec).drop().build()   the Phase 1 scene, --preset drop (2.7)
     .build() -> str
 ```
 
@@ -55,6 +56,9 @@ HANDLE_RADIUS = 0.006
 POST_RADIUS = 0.003
 HANDLE_RGBA = (0.9, 0.85, 0.2, 1.0)
 EXIT_RGBA = (0.2, 0.6, 0.3, 1.0)
+#: Drop preset: cube edge and release height, in metres (Phase 1 gate: rest at DROP_BOX / 2).
+DROP_BOX = 0.1
+DROP_HEIGHT = 0.5
 #: Half-section of the floor and guide rails, in metres.
 RAIL_HALF = 0.02
 RAIL_RGBA = (0.35, 0.37, 0.42, 1.0)
@@ -268,6 +272,26 @@ class MjcfBuilder:
                                               ("pos", num(s.rail_line_x, py, g + post_half)), *free, rgba])
         return self
 
+    def drop(self) -> MjcfBuilder:
+        """The Phase 1 drop scene (``--preset drop``): a ground plane and a
+        0.1 m cube on a free joint released at z = 0.5, with a 1 ms timestep.
+
+        It replaces the hand-written ``examples/drop.xml`` (row 2.7) and keeps
+        its names (``floor``, ``box``, ``box_free``, ``box_geom``), so the
+        Phase 1 gate and ``rookery`` read it unchanged. Bodies: 0 = world,
+        1 = box, so nbody == 2.
+        """
+        self.root.set("model", "drop")
+        self._el(self.root, "option", [("timestep", num(0.001)), ("gravity", num(0, 0, -9.81))])
+        self._worldbody = self._el(self.root, "worldbody")
+        wb = self._worldbody
+        self._el(wb, "geom", [("name", "floor"), ("type", "plane"), ("size", num(1, 1, 0.1))])
+        body = self._el(wb, "body", [("name", "box"), ("pos", num(0, 0, DROP_HEIGHT))])
+        self._el(body, "freejoint", [("name", "box_free")])
+        h = DROP_BOX / 2
+        self._el(body, "geom", [("name", "box_geom"), ("type", "box"), ("size", num(h, h, h)), ("mass", num(1))])
+        return self
+
     def build(self) -> str:
         """Serialise: two-space indent, a trailing newline, and no XML declaration or timestamp."""
         tree = ET.ElementTree(self.root)
@@ -285,5 +309,16 @@ def spec_json(spec: SceneSpec) -> str:
 
 
 def build_scene(spec: SceneSpec) -> str:
-    """The farm scene for ``spec``."""
+    """The scene for ``spec``: the named preset, or else the farm."""
+    if spec.preset == "drop":
+        return MjcfBuilder(spec).drop().build()
     return MjcfBuilder(spec).header().tray().water().cells().exit_tray().crane_frame().build()
+
+
+def spec_from_json(text: str) -> SceneSpec:
+    """Rebuild the ``SceneSpec`` that :func:`spec_json` wrote. The ``derived``
+    block is output only and is ignored. This is what ``--check`` uses: each
+    committed ``.json`` is the recipe for the ``.xml`` beside it."""
+    data = json.loads(text)
+    data.pop("derived", None)
+    return SceneSpec(**data)
