@@ -10,7 +10,8 @@ at the end:
     .tray()        body tray_0: floor + 4 walls                    (2.3)
     .water()       geom water: translucent, contact-free           (2.3)
     .cells()       box_r_c + handle_r_c, row-major                 (2.4)
-    .exit_tray()   geom exit_tray beside the rail                  (2.5)
+    .exit_tray()   geom exit_tray between tray and rail            (2.5)
+    .crane_frame() floor_rail + guide_rail (static, contact-free)  (2.5)
     .build() -> str
 ```
 
@@ -29,8 +30,10 @@ grid is centred on the origin.
 
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
+from dataclasses import asdict
 
 from .spec import SceneSpec
 
@@ -51,6 +54,10 @@ BOX_RGBA = (0.85, 0.45, 0.15, 1.0)
 HANDLE_RADIUS = 0.006
 POST_RADIUS = 0.003
 HANDLE_RGBA = (0.9, 0.85, 0.2, 1.0)
+EXIT_RGBA = (0.2, 0.6, 0.3, 1.0)
+#: Half-section of the floor and guide rails, in metres.
+RAIL_HALF = 0.02
+RAIL_RGBA = (0.35, 0.37, 0.42, 1.0)
 #: Contact margin on box walls, so neighbours and tray walls are seen
 #: slightly before they touch (no tunnelling at 1 ms).
 BOX_MARGIN = 0.001
@@ -59,6 +66,18 @@ BOX_MARGIN = 0.001
 def num(*xs: float) -> str:
     """Floats as MJCF text: fixed 6 decimals, space-separated, no ``-0.000000``."""
     return " ".join(f"{(x + 0.0):.6f}" if abs(x) >= 5e-7 else "0.000000" for x in xs)
+
+
+def look_at(eye: tuple[float, float, float], target: tuple[float, float, float]) -> list[tuple[str, str]]:
+    """Camera ``pos`` and ``xyaxes`` that look from ``eye`` at ``target`` with +Z up."""
+    fx, fy, fz = (t - e for t, e in zip(target, eye, strict=True))
+    n = (fx * fx + fy * fy + fz * fz) ** 0.5
+    fx, fy, fz = fx / n, fy / n, fz / n
+    rx, ry, rz = fy * 1 - fz * 0, fz * 0 - fx * 1, 0.0  # right = forward x up(0, 0, 1)
+    n = (rx * rx + ry * ry) ** 0.5
+    rx, ry = rx / n, ry / n
+    ux, uy, uz = ry * fz - rz * fy, rz * fx - rx * fz, rx * fy - ry * fx  # up = right x forward
+    return [("pos", num(*eye)), ("xyaxes", num(rx, ry, rz, ux, uy, uz))]
 
 
 class MjcfBuilder:
@@ -101,11 +120,12 @@ class MjcfBuilder:
         wb = self._worldbody
         self._el(wb, "light", [("name", "sun"), ("pos", num(0, 0, 2)), ("dir", num(0, 0, -1)),
                                ("diffuse", num(0.8, 0.8, 0.8))])
-        # Looks down at the tray from the aisle side (-X), far enough back to
-        # frame the whole tray whatever the grid size.
-        span = max(s.tray_size) + 2 * TRAY_WALL
-        self._el(wb, "camera", [("name", "overview"), ("pos", num(-1.1 * span, 0, 1.1 * span)),
-                                ("xyaxes", num(0, -1, 0, 0.7071, 0, 0.7071))])
+        # Three-quarter view from the -Y end, looking at the middle of the
+        # scene (tray to rail), far enough back to frame everything.
+        cx = (s.tray_size[0] / 2 + s.rail_line_x) / 2
+        span = max(s.tray_size[1], s.tray_size[0] / 2 - s.rail_line_x) + 2 * TRAY_WALL
+        self._el(wb, "camera", [("name", "overview"),
+                                *look_at((cx + 0.35 * span, -1.25 * span, 1.0 * span), (cx, 0, 0.15))])
         self._el(wb, "geom", [("name", "ground"), ("type", "plane"), ("size", num(2, 2, 0.1)),
                               ("pos", num(0, 0, -TRAY_WALL)), ("rgba", num(0.3, 0.32, 0.3, 1))])
         return self
@@ -205,6 +225,49 @@ class MjcfBuilder:
                                         ("rgba", num(*HANDLE_RGBA))])
         return self
 
+    def exit_tray(self) -> MjcfBuilder:
+        """Geom ``exit_tray``: a square plate (one cell) whose top is at ``spec.exit_pose``,
+        on a leg down to the ground. Static, so it is part of the world body."""
+        s = self.spec
+        x, y, z = s.exit_pose
+        half = s.exit_tray_half
+        t = TRAY_WALL
+        rgba = ("rgba", num(*EXIT_RGBA))
+        self._el(self.worldbody, "geom", [("name", "exit_tray"), ("type", "box"),
+                                          ("size", num(half, half, t / 2)), ("pos", num(x, y, z - t / 2)), rgba])
+        leg_bottom = -TRAY_WALL  # the ground plane
+        leg_half = (z - t - leg_bottom) / 2
+        self._el(self.worldbody, "geom", [("name", "exit_tray_leg"), ("type", "cylinder"),
+                                          ("size", num(0.015, leg_half)), ("pos", num(x, y, leg_bottom + leg_half)),
+                                          rgba])
+        return self
+
+    def crane_frame(self) -> MjcfBuilder:
+        """The static rails of the stacker crane, carried over from the preview.
+
+        ``floor_rail`` runs along Y at ``spec.rail_line_x`` on the ground and carries the
+        crane's truck. ``guide_rail`` runs above it at ``guide_rail_height``
+        and keeps the mast upright, held by a post at each end. All of it is
+        contact-free in Phase 2. The moving crane arrives in Phase 3.
+        """
+        s = self.spec
+        half_len = s.rail_length / 2
+        g = -TRAY_WALL  # ground plane height
+        rgba = ("rgba", num(*RAIL_RGBA))
+        free = [("contype", "0"), ("conaffinity", "0")]
+        self._el(self.worldbody, "geom", [("name", "floor_rail"), ("type", "box"),
+                                          ("size", num(RAIL_HALF, half_len, RAIL_HALF)),
+                                          ("pos", num(s.rail_line_x, 0, g + RAIL_HALF)), *free, rgba])
+        self._el(self.worldbody, "geom", [("name", "guide_rail"), ("type", "box"),
+                                          ("size", num(RAIL_HALF, half_len, RAIL_HALF)),
+                                          ("pos", num(s.rail_line_x, 0, s.guide_rail_height + RAIL_HALF)), *free, rgba])
+        post_half = (s.guide_rail_height - g) / 2
+        for side, py in (("yneg", -half_len), ("ypos", half_len)):
+            self._el(self.worldbody, "geom", [("name", f"guide_post_{side}"), ("type", "box"),
+                                              ("size", num(RAIL_HALF, RAIL_HALF, post_half)),
+                                              ("pos", num(s.rail_line_x, py, g + post_half)), *free, rgba])
+        return self
+
     def build(self) -> str:
         """Serialise: two-space indent, a trailing newline, and no XML declaration or timestamp."""
         tree = ET.ElementTree(self.root)
@@ -212,6 +275,15 @@ class MjcfBuilder:
         return ET.tostring(self.root, encoding="unicode") + "\n"
 
 
+def spec_json(spec: SceneSpec) -> str:
+    """The spec as JSON, written next to the MJCF (``rookery.json``) so Rust can
+    read scene metadata later. Keys are sorted and indented, with a trailing newline."""
+    data = asdict(spec)
+    # Resolved placements, so a reader never has to re-derive the defaults.
+    data["derived"] = {"exit_pose": list(spec.exit_pose), "rail_line_x": spec.rail_line_x}
+    return json.dumps(data, sort_keys=True, indent=2) + "\n"
+
+
 def build_scene(spec: SceneSpec) -> str:
-    """The farm scene for ``spec``, as far as the builder goes today."""
-    return MjcfBuilder(spec).header().tray().water().cells().build()
+    """The farm scene for ``spec``."""
+    return MjcfBuilder(spec).header().tray().water().cells().exit_tray().crane_frame().build()
