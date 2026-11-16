@@ -8,7 +8,7 @@
 //!
 //! - Phase 2 demo: `rookery scene/generated/rookery.xml` gives `nbody 18`
 //!   (world, tray_0, 16 boxes; the exit tray and rails are world geoms).
-//! - Phase 1 demo: `rookery examples/drop.xml` ends with `box z 0.049892`.
+//! - Phase 1 demo: `rookery scene/generated/drop.xml` ends with `box z 0.049892`.
 //!
 //! ```text
 //!   main ──▶ Sim::load(scene) ──▶ snapshot().bodies → names
@@ -36,7 +36,7 @@ const BODY: &str = "box";
 #[derive(Debug, Parser)]
 #[command(version, about = "Run a Rookery scene headless")]
 struct Cli {
-    /// MJCF scene to load, e.g. examples/drop.xml
+    /// MJCF scene to load, e.g. scene/generated/rookery.xml
     scene: PathBuf,
 }
 
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn drop_scene_still_prints_the_phase1_height() {
-        let r = run(&cli("examples/drop.xml")).expect("drop.xml loads");
+        let r = run(&cli("scene/generated/drop.xml")).expect("drop.xml loads");
         assert_eq!(r.bodies, ["world", "box"]);
         let z = r.box_z.expect("drop.xml has `box`");
         assert!((z - 0.05).abs() < 0.001, "z = {z}");

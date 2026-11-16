@@ -1,7 +1,7 @@
 //! Phase 1 gate: a 0.1 m box dropped onto a plane comes to rest at half
 //! its size.
 //!
-//! Load `examples/drop.xml`, step 2,000 times at 1 ms (2 s of sim time),
+//! Load `scene/generated/drop.xml`, step 2,000 times at 1 ms (2 s of sim time),
 //! and assert `|z − 0.05| < 0.001` for body `box`.
 //!
 //! It talks to MuJoCo only through the `sim` **Facade**, the same surface
@@ -14,13 +14,16 @@
 //!                     Sim::body_index("box") ──index──▶ bodies[i].pos[2] ≈ 0.05
 //! ```
 //!
-//! Red on `main` from row 1.4 (the facade bodies are `todo!()`); green once
-//! row 1.6 lands. Row 2.7 points it at `scene/generated/drop.xml`.
+//! Red on `main` from row 1.4, green since row 1.6. Since row 2.7 it loads
+//! the generated scene (`scene.cli --preset drop`), not a hand-written file.
 
 use sim::Sim;
 
 /// The scene, relative to this crate so `cargo test -p gates` works from any cwd.
-const SCENE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/drop.xml");
+const SCENE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../scene/generated/drop.xml"
+);
 /// 2,000 steps × the scene's 1 ms timestep = 2 s.
 const STEPS: usize = 2_000;
 const TIMESTEP: f64 = 0.001;
@@ -31,7 +34,7 @@ const TOL: f64 = 0.001;
 
 #[test]
 fn box_rests_at_half_its_size() {
-    let mut sim = Sim::load(SCENE).expect("examples/drop.xml should load");
+    let mut sim = Sim::load(SCENE).expect("scene/generated/drop.xml should load");
     let box_idx = sim
         .body_index("box")
         .expect("drop.xml should have a body named `box`");

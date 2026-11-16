@@ -273,7 +273,10 @@ impl Drop for Sim {
 mod tests {
     use super::*;
 
-    const DROP_XML: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/drop.xml");
+    const DROP_XML: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scene/generated/drop.xml"
+    );
 
     #[test]
     fn bad_path_is_an_error() {

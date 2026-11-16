@@ -1,0 +1,10 @@
+<mujoco model="drop">
+  <option timestep="0.001000" gravity="0.000000 0.000000 -9.810000" />
+  <worldbody>
+    <geom name="floor" type="plane" size="1.000000 1.000000 0.100000" />
+    <body name="box" pos="0.000000 0.000000 0.500000">
+      <freejoint name="box_free" />
+      <geom name="box_geom" type="box" size="0.050000 0.050000 0.050000" mass="1.000000" />
+    </body>
+  </worldbody>
+</mujoco>

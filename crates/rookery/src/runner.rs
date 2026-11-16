@@ -99,7 +99,10 @@ impl<H: Hooks> Runner<H> {
 mod tests {
     use super::*;
 
-    const DROP_XML: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/drop.xml");
+    const DROP_XML: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scene/generated/drop.xml"
+    );
 
     /// Records each hook call with the sim time it saw.
     #[derive(Default)]
