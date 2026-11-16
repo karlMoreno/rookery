@@ -83,6 +83,11 @@ jobs:
           MUJOCO_GL: osmesa
           PYOPENGL_PLATFORM: osmesa
         run: uv run pytest tests -q
+      - name: Scene sha256 (must match the Air; row 2.5)
+        working-directory: scene
+        run: |
+          uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08 --out "$RUNNER_TEMP/scene/rookery.xml"
+          sha256sum "$RUNNER_TEMP"/scene/rookery.xml "$RUNNER_TEMP"/scene/rookery.json
       - name: Python gates
         working-directory: scene
         # pytest exits 5 when it collects no tests, which is expected until 2.2 lands.

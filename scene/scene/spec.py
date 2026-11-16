@@ -17,10 +17,12 @@ wrong. This idea was carried over from the throwaway preview's ``Spec``.
   │ box_size (w, d, h)         (m)        │
   │ handle_height, shelf_gap   (m)        │
   │ exit_tray_pose (x, y, z)   (m)        │
+  │ rail_x, guide_rail_height  (m)        │
   │ preset: None | "drop"                 │
   ├───────────────────────────────────────┤
   │ + cells / tray_size / water_z         │  derived (@property)
   │ + cell_center(r, c) / handle_top_z    │
+  │ + exit_pose / rail_line_x (auto)      │
   │ - __post_init__: collect, then raise  │
   └───────────────────────────────────────┘
           ▲ reads                  ▲ reads
@@ -35,6 +37,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
+
+#: Minimum gap between neighbouring fixed parts (tray, exit tray, rail), in metres.
+CLEARANCE = 0.02
+#: Slack on geometric comparisons, so an automatic placement exactly at a
+#: limit is not rejected for float rounding.
+EPS = 1e-9
+
+#: Default height of the exit tray's top surface, in metres.
+EXIT_TRAY_Z = 0.10
+#: Default distance from the exit tray's aisle edge to the floor rail, in metres.
+RAIL_SETBACK = 0.12
 
 #: Presets the builder knows. ``"drop"`` is the Phase 1 plane-and-box scene (row 2.7).
 PRESETS: tuple[str, ...] = ("drop",)
@@ -66,9 +79,18 @@ class SceneSpec:
     #: Clear vertical space between the top of a tray's handles and the
     #: underside of the tray above it. Matters once ``trays > 1`` (Phase 10).
     shelf_gap: float = 0.08
-    #: Exit tray position (x, y, z) in the tray frame. It sits beside the rail
-    #: line on the aisle side (-X) and is placed for real in row 2.5.
-    exit_tray_pose: tuple[float, float, float] = (-0.45, 0.0, 0.10)
+    #: Centre of the exit tray's top surface (x, y, z) in the tray frame. It
+    #: sits on the aisle side (-X), between the tray and the floor rail.
+    #: ``None`` (the default) places it automatically: ``CLEARANCE`` off the
+    #: tray's aisle edge, at y = 0, z = ``EXIT_TRAY_Z``. Read the resolved
+    #: value from ``exit_pose``.
+    exit_tray_pose: tuple[float, float, float] | None = None
+    #: X of the crane's floor rail, which runs along Y on the aisle side. The
+    #: stacker crane (Phase 3) rides it. ``None`` puts it ``RAIL_SETBACK``
+    #: beyond the exit tray. Read the resolved value from ``rail_line_x``.
+    rail_x: float | None = None
+    #: Height of the underside of the top guide rail that keeps the mast upright.
+    guide_rail_height: float = 1.0
     #: ``None`` builds the farm. A name from ``PRESETS`` builds that scene instead.
     preset: Literal["drop"] | None = None
 
@@ -94,6 +116,31 @@ class SceneSpec:
         """Height of a handle's top in the tray frame (boxes rest on the floor)."""
         return self.box_size[2] + self.handle_height
 
+    @property
+    def exit_pose(self) -> tuple[float, float, float]:
+        """Resolved exit tray pose: ``exit_tray_pose`` or the automatic placement."""
+        if self.exit_tray_pose is not None:
+            return self.exit_tray_pose
+        x = -self.tray_size[0] / 2 - CLEARANCE - self.exit_tray_half
+        return (x, 0.0, EXIT_TRAY_Z)
+
+    @property
+    def rail_line_x(self) -> float:
+        """Resolved floor-rail X: ``rail_x`` or ``RAIL_SETBACK`` beyond the exit tray."""
+        if self.rail_x is not None:
+            return self.rail_x
+        return self.exit_pose[0] - self.exit_tray_half - RAIL_SETBACK
+
+    @property
+    def exit_tray_half(self) -> float:
+        """Half-side of the square exit tray: one cell, so it holds one box."""
+        return self.cell_pitch / 2
+
+    @property
+    def rail_length(self) -> float:
+        """Floor rail length along Y: the tray plus one pitch of overrun at each end."""
+        return self.tray_size[1] + 2 * self.cell_pitch
+
     def cell_center(self, r: int, c: int) -> tuple[float, float]:
         """(x, y) of cell ``(r, c)``, counted from 0, with the grid centred on the origin."""
         if not (0 <= r < self.rows and 0 <= c < self.cols):
@@ -108,7 +155,8 @@ class SceneSpec:
         # Normalise sequences to tuples so equal specs hash and compare equal,
         # however they were passed in (lists from argparse or TOML).
         object.__setattr__(self, "box_size", tuple(float(v) for v in self.box_size))
-        object.__setattr__(self, "exit_tray_pose", tuple(float(v) for v in self.exit_tray_pose))
+        if self.exit_tray_pose is not None:
+            object.__setattr__(self, "exit_tray_pose", tuple(float(v) for v in self.exit_tray_pose))
 
         p: list[str] = []
         for name in ("trays", "rows", "cols"):
@@ -117,13 +165,14 @@ class SceneSpec:
                 p.append(f"{name} must be a whole number >= 1, got {v!r}")
         if len(self.box_size) != 3:
             p.append(f"box_size must be (width, depth, height), got {self.box_size!r}")
-        if len(self.exit_tray_pose) != 3:
+        if self.exit_tray_pose is not None and len(self.exit_tray_pose) != 3:
             p.append(f"exit_tray_pose must be (x, y, z), got {self.exit_tray_pose!r}")
         lengths = {
             "cell_pitch": self.cell_pitch,
             "water_depth": self.water_depth,
             "handle_height": self.handle_height,
             "shelf_gap": self.shelf_gap,
+            "guide_rail_height": self.guide_rail_height,
         }
         lengths.update({f"box_size[{i}]": v for i, v in enumerate(self.box_size)})
         for name, v in lengths.items():
@@ -145,6 +194,30 @@ class SceneSpec:
                     f"handle top {self.handle_top_z:.3f} must be above the water plane "
                     f"{self.water_z:.3f}, or the hook has to reach into the water; "
                     "raise box_size height or handle_height, or lower water_depth"
+                )
+            # Aisle side, from -X inwards: floor rail | exit tray | tray.
+            ex, ey, ez = self.exit_pose
+            half = self.exit_tray_half
+            tray_edge = -self.tray_size[0] / 2
+            if ex + half > tray_edge - CLEARANCE + EPS:
+                p.append(
+                    f"exit tray (x {ex - half:.3f}..{ex + half:.3f}) overlaps the tray, whose aisle edge "
+                    f"is at x {tray_edge:.3f}; it needs {CLEARANCE:.3f} m clear"
+                )
+            if self.rail_line_x > ex - half - CLEARANCE + EPS:
+                p.append(
+                    f"rail_x {self.rail_line_x:.3f} must be on the aisle side of the exit tray "
+                    f"(x < {ex - half - CLEARANCE:.3f})"
+                )
+            if abs(ey) + half > self.rail_length / 2 + EPS:
+                p.append(f"exit tray y {ey:.3f} is beyond the rail's reach (±{self.rail_length / 2:.3f})")
+            if ez <= 0:
+                p.append(f"exit tray z {ez:.3f} must be above the tray floor (z > 0)")
+            tallest = max(self.handle_top_z, ez + self.handle_top_z)
+            if self.guide_rail_height < tallest + 0.1:
+                p.append(
+                    f"guide_rail_height {self.guide_rail_height:.3f} must clear the tallest handle "
+                    f"({tallest:.3f}) by 0.1 m"
                 )
         if p:
             raise SpecError(p)
