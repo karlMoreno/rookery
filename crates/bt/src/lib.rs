@@ -44,10 +44,14 @@
 //! which returns `"success"`, `"failure"` or `"running"`.
 //!
 //! **Lua sets goals, never raw targets** ([Band 1] lesson, see #19): the only
-//! write a leaf has is a goal pose (`bb:goto(pose)`). Rust expands it with
+//! write a leaf has is a goal pose (`bb:go_to(pose)`; not `goto`, which is a
+//! reserved word in Lua 5.4). Rust expands it with
 //! `mast::route` and plays it through `mast::clamp`.
 
+mod lua;
 pub mod nodes;
+
+pub use lua::{LuaLeaf, RELOAD_CHECK_TICKS};
 
 use std::any::{Any, TypeId};
 use std::marker::PhantomData;
@@ -362,7 +366,7 @@ impl std::error::Error for BtError {}
 /// A loaded behavior tree.
 pub struct Tree {
     root: Box<dyn Node>,
-    errors: Vec<LeafError>,
+    errors: lua::ErrorSink,
 }
 
 impl std::fmt::Debug for Tree {
@@ -376,19 +380,19 @@ impl std::fmt::Debug for Tree {
 impl Tree {
     /// Load the tree file at `path` (see "Tree files" above), using `lua`.
     pub fn load(path: impl AsRef<Path>, lua: &Lua) -> Result<Tree, BtError> {
-        let _ = (path.as_ref(), lua);
-        todo!("rows 4.2 + 4.4: run the tree file with the node constructors, build the nodes")
+        let errors = lua::ErrorSink::default();
+        let root = lua::load_tree(path.as_ref(), lua, &errors)?;
+        Ok(Tree { root, errors })
     }
 
     /// Tick the root once. A Lua error in a leaf makes that leaf return
     /// `Failure` and is recorded in [`Tree::take_errors`]; it never panics.
     pub fn tick(&mut self, bb: &mut Blackboard) -> Status {
-        let _ = (bb, &mut self.root);
-        todo!("rows 4.2 + 4.4: tick the root, collect leaf errors")
+        self.root.tick(bb)
     }
 
     /// Leaf errors since the last call, oldest first.
     pub fn take_errors(&mut self) -> Vec<LeafError> {
-        std::mem::take(&mut self.errors)
+        std::mem::take(&mut *self.errors.borrow_mut())
     }
 }
