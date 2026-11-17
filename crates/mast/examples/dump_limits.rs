@@ -3,7 +3,9 @@
 //! with the builder's hook geometry and home pose; both fail on drift.
 //! Hand-formatted, so `mast` needs no serde for it.
 
-use mast::kinematics::{HANDLE_DIAMETER, HOME, HOOK_FINGER, HOOK_RADIUS, HOOK_TIP_RISE};
+use mast::kinematics::{
+    HANDLE_DIAMETER, HOME, HOOK_FINGER, HOOK_RADIUS, HOOK_TIP_RISE, HOOK_WIDTH,
+};
 use mast::limits::{ARM_RETRACTED, ARM_THICKNESS, MAX_VEL, RANGES, WORKSPACE};
 
 const JOINTS: [&str; 4] = ["rail_y", "mast_z", "arm_x", "hook_lift"];
@@ -29,7 +31,7 @@ fn main() {
     // Hook geometry, which the scene builder duplicates (row 4.1 drift check).
     println!(
         "  \"hook\": {{\"finger\": {HOOK_FINGER:.6}, \"radius\": {HOOK_RADIUS:.6}, \
-         \"tip_rise\": {HOOK_TIP_RISE:.6}, \"handle_diameter\": {HANDLE_DIAMETER:.6}}},"
+         \"tip_rise\": {HOOK_TIP_RISE:.6}, \"width\": {HOOK_WIDTH:.6}, \"handle_diameter\": {HANDLE_DIAMETER:.6}}},"
     );
     let h: Vec<String> = HOME.0.iter().map(|x| format!("{x:.6}")).collect();
     println!("  \"home\": [{}]", h.join(", "));

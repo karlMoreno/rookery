@@ -21,7 +21,8 @@ def test_the_engaged_hook_clears_box_and_handle_in_the_mjcf():
     m = mujoco.MjModel.from_xml_string(build_scene(s))
     g = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)  # noqa: E731
     handle_r = m.geom_size[g("handle_1_1")][0]
-    hook_r = m.geom_size[g("hook")][0]
+    hook_r = s.hook_radius  # capsule radius, or the saddle plate's half-thickness
+    assert m.geom_size[g("hook")][2 if s.hook_width > 0 else 0] == pytest.approx(hook_r)
     box_top = s.box_size[2]
     handle_bottom = s.handle_top_z - 2 * handle_r
     centre = (box_top + handle_bottom) / 2
@@ -69,3 +70,22 @@ def test_bad_contact_params_are_refused(bad):
 def test_contact_round_trips_through_json():
     s = SceneSpec(contact=ContactParams(condim=4, solref=(0.004, 1.0)))
     assert spec_from_json(spec_json(s)) == s
+
+
+def test_the_saddle_is_a_flat_plate_as_wide_as_hook_width():
+    s = SceneSpec()
+    m = mujoco.MjModel.from_xml_string(build_scene(s))
+    g = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "hook")
+    assert m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX
+    assert 2 * m.geom_size[g][1] == pytest.approx(s.hook_width)
+
+
+def test_hook_width_zero_keeps_the_round_finger():
+    m = mujoco.MjModel.from_xml_string(build_scene(SceneSpec(hook_width=0.0)))
+    g = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "hook")
+    assert m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE
+
+
+def test_a_saddle_wider_than_the_posts_allow_is_refused():
+    with pytest.raises(SpecError):
+        SceneSpec(hook_width=0.09)

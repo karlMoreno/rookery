@@ -58,6 +58,7 @@ def test_hook_geometry_and_home_match_mast():
     assert s.hook_finger == pytest.approx(hook["finger"])
     assert s.hook_radius == pytest.approx(hook["radius"])
     assert s.hook_tip_rise == pytest.approx(hook["tip_rise"])
+    assert s.hook_width == pytest.approx(hook["width"])
     assert s.handle_dia == pytest.approx(hook["handle_diameter"])
     assert [GANTRY_HOME[j] for j in JOINTS] == pytest.approx(d["home"])
 
