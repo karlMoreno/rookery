@@ -36,6 +36,12 @@
   "rail_x": null,
   "rows": 4,
   "shelf_gap": 0.08,
+  "shell_length": 0.06,
+  "shell_mass": 0.005,
+  "shell_offset_y": 0.03,
+  "shell_park_z": -0.3,
+  "shell_radius": 0.008,
+  "shells": true,
   "trays": 1,
   "water_depth": 0.05
 }

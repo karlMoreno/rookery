@@ -170,9 +170,10 @@ pub fn moved_boxes(first: &[f64], last: &[f64], rows: usize, cols: usize) -> Vec
 }
 
 /// The largest position change of any free-joint body between two qpos
-/// vectors. The scene builder emits the boxes' free joints first (7 values
-/// each) and the crane's 4 slides last, so the boxes are the first
-/// `(nq - 4) / 7` blocks.
+/// vectors. The scene builder emits the free joints first (7 values each:
+/// boxes, then crawfish, then shells) and the crane's 4 slides last, so the
+/// free bodies are the first `(nq - 4) / 7` blocks. Parked shells lie still,
+/// so they only count once the lifecycle moves one (7.5).
 pub fn max_box_displacement(first: &[f64], last: &[f64]) -> f64 {
     let n = first.len().min(last.len());
     let boxes = n.saturating_sub(4) / 7;
