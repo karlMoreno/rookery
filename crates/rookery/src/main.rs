@@ -18,6 +18,8 @@
 //!   print Report { nbody, bodies, box z? } ◀────────────┘
 //! ```
 
+mod bt_hooks;
+mod crane;
 mod runner;
 mod script;
 mod tour;
@@ -51,7 +53,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Cmd {
-    /// Play a tour script on the crane and log every tick (Phase 3 demo).
+    /// Play a tour script (--script) or a behavior tree (--tree) on the crane,
+    /// logging every tick (Phase 3 and Phase 4 demos).
     Run(tour_cmd::RunArgs),
 }
 
@@ -158,7 +161,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&script, "[Goto(Cell(3, 3)), Goto(Home)]").unwrap();
         let args = tour_cmd::RunArgs {
-            script,
+            script: Some(script),
+            tree: None,
+            seconds: 60.0,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -184,6 +189,81 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A BtHooks runner on the committed scene with `tree` (a Lua tree source)
+    /// whose leaves live in the same temp dir.
+    fn bt_runner(
+        name: &str,
+        tree: &str,
+        leaves: &[(&str, &str)],
+    ) -> Runner<bt_hooks::BtHooks<std::io::Sink>> {
+        let dir = std::env::temp_dir().join(format!("rookery-bt-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (file, src) in leaves {
+            std::fs::write(dir.join(file), src).unwrap();
+        }
+        std::fs::write(dir.join("tree.lua"), tree).unwrap();
+        let tree = bt::Tree::load(dir.join("tree.lua"), &mlua::Lua::new()).expect("tree loads");
+        let scene = cli("scene/generated/rookery.xml");
+        let meta = mast::SceneMeta::load(scene.with_extension("json")).unwrap();
+        let sim = Sim::load(&scene).unwrap();
+        let state = mast::GantryState {
+            targets: mast::home(),
+            windows: mast::kinematics::shelf_windows(&meta),
+        };
+        let hooks = bt_hooks::BtHooks::new(&sim, tree, state, meta, 0.02, std::io::sink()).unwrap();
+        Runner::new(sim, hooks, NonZeroUsize::new(20).unwrap())
+    }
+
+    #[test]
+    fn the_tree_ticks_every_20_physics_steps() {
+        let mut r = bt_runner(
+            "rate",
+            r#"return Leaf("idle.lua")"#,
+            &[("idle.lua", r#"function tick(bb) return "running" end"#)],
+        );
+        r.run(1_000);
+        assert_eq!(r.hooks().tree_ticks, 50);
+    }
+
+    #[test]
+    fn an_off_grid_goal_is_a_named_error_and_the_crane_holds() {
+        let mut r = bt_runner(
+            "offgrid",
+            r#"return Leaf("bad.lua")"#,
+            &[(
+                "bad.lua",
+                r#"function tick(bb) bb:go_to(Cell(9, 0)) return "running" end"#,
+            )],
+        );
+        r.run(200);
+        let h = r.hooks();
+        assert!(
+            h.errors.iter().any(|e| e.contains("outside the 4x4 grid")),
+            "{:?}",
+            h.errors
+        );
+        assert_eq!(h.targets(), mast::home(), "the crane must hold");
+    }
+
+    #[test]
+    fn a_tree_goal_drives_the_crane_to_the_cell() {
+        let mut r = bt_runner(
+            "drive",
+            r#"return Leaf("go.lua")"#,
+            &[(
+                "go.lua",
+                r#"function tick(bb) bb:go_to(Cell(1, 2)) return "running" end"#,
+            )],
+        );
+        r.run(20_000); // 20 s of sim time
+        let h = r.hooks();
+        assert!(h.errors.is_empty(), "{:?}", h.errors);
+        let meta = mast::SceneMeta::load(cli("scene/generated/rookery.json")).unwrap();
+        let goal = mast::cell_pose(1, 2, &meta).unwrap();
+        assert_eq!(h.targets(), goal, "targets reach the engage pose exactly");
+        assert_eq!(h.crane().route_len(), 0);
     }
 
     #[test]
@@ -216,8 +296,14 @@ mod tour_cmd {
     #[derive(Debug, clap::Args)]
     pub struct RunArgs {
         /// Tour script (RON), e.g. examples/tour.ron
+        #[arg(long, conflicts_with = "tree", required_unless_present = "tree")]
+        pub script: Option<PathBuf>,
+        /// Behavior tree (Lua), e.g. lua/trees/patrol.lua (row 4.5)
         #[arg(long)]
-        pub script: PathBuf,
+        pub tree: Option<PathBuf>,
+        /// With --tree: sim time to run, seconds
+        #[arg(long, default_value_t = 60.0)]
+        pub seconds: f64,
         /// Directory for run logs: <log>/<run id>/{qpos.csv, commands.json, summary.json}
         #[arg(long, default_value = "runs")]
         pub log: PathBuf,
@@ -230,8 +316,11 @@ mod tour_cmd {
     }
 
     pub fn run(args: &RunArgs) -> Result<String, String> {
+        let Some(script_path) = &args.script else {
+            return tree_run(args);
+        };
         let meta = SceneMeta::load(args.scene.with_extension("json")).map_err(|e| e.to_string())?;
-        let steps = script::load(&args.script)?;
+        let steps = script::load(script_path)?;
         let start = kinematics::home();
         let cmds = script::expand(&steps, start, &meta)?;
         let ncmds = cmds.len();
@@ -305,12 +394,12 @@ mod tour_cmd {
 
         fs::write(
             dir.join("commands.json"),
-            serde_json::to_string_pretty(&hooks.log).map_err(|e| e.to_string())? + "\n",
+            serde_json::to_string_pretty(hooks.log()).map_err(|e| e.to_string())? + "\n",
         )
         .map_err(|e| e.to_string())?;
         let summary = serde_json::json!({
             "id": id,
-            "script": args.script.display().to_string(),
+            "script": script_path.display().to_string(),
             "scene": args.scene.display().to_string(),
             "commands": ncmds,
             "outcome": format!("{outcome:?}"),
@@ -347,6 +436,94 @@ mod tour_cmd {
         match (outcome, at_home) {
             (Outcome::Completed, true) => Ok(report),
             _ => Err(report),
+        }
+    }
+
+    /// `rookery run --tree`: tick a behavior tree at 50 Hz for `--seconds`
+    /// (row 4.5). Writes the same run log as a tour, plus the tree's errors.
+    pub fn tree_run(args: &RunArgs) -> Result<String, String> {
+        use crate::bt_hooks::BtHooks;
+
+        let tree_path = args.tree.as_ref().ok_or("give --script or --tree")?;
+        let meta = SceneMeta::load(args.scene.with_extension("json")).map_err(|e| e.to_string())?;
+        let lua = mlua::Lua::new();
+        let tree = bt::Tree::load(tree_path, &lua).map_err(|e| e.to_string())?;
+
+        let mut sim = Sim::load(&args.scene).map_err(|e| e.to_string())?;
+        if sim.apply(&sim::Targets(vec![0.0; 4])).is_err() {
+            return Err(format!(
+                "{}: expected the four crane actuators",
+                args.scene.display()
+            ));
+        }
+        let dt_phys = sim.timestep();
+        let every = (1.0 / (TICK_HZ * dt_phys)).round().max(1.0) as usize;
+        let dt = every as f64 * dt_phys;
+
+        let id = args.id.clone().unwrap_or_else(|| {
+            let secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("tree-{secs}")
+        });
+        let dir = args.log.join(&id);
+        fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let qpos = BufWriter::new(File::create(dir.join("qpos.csv")).map_err(|e| e.to_string())?);
+
+        let state = GantryState {
+            targets: kinematics::home(),
+            windows: shelf_windows(&meta),
+        };
+        let hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?;
+        let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
+        let mut runner = Runner::new(sim, hooks, every_nz);
+        let steps = (args.seconds.clamp(0.0, MAX_SECONDS) / dt_phys).round() as usize;
+        runner.run(steps);
+
+        let hooks = runner.hooks();
+        if let Some(e) = hooks.crane().io_error() {
+            return Err(format!("writing qpos.csv: {e}"));
+        }
+        let t = runner.sim().snapshot().time;
+        fs::write(
+            dir.join("commands.json"),
+            serde_json::to_string_pretty(&hooks.crane().log).map_err(|e| e.to_string())? + "\n",
+        )
+        .map_err(|e| e.to_string())?;
+        let summary = serde_json::json!({
+            "id": id,
+            "tree": tree_path.display().to_string(),
+            "scene": args.scene.display().to_string(),
+            "sim_time": t,
+            "tree_ticks": hooks.tree_ticks,
+            "last_status": format!("{:?}", hooks.last_status),
+            "goal": format!("{:?}", hooks.goal()),
+            "final_targets": hooks.targets().0,
+            "errors": hooks.errors,
+        });
+        fs::write(
+            dir.join("summary.json"),
+            serde_json::to_string_pretty(&summary).unwrap_or_default() + "\n",
+        )
+        .map_err(|e| e.to_string())?;
+        let report = format!(
+            "run {id}: tree {}, {} ticks over {:.2} s sim, last status {:?}, goal {:?}, {} error(s)\nlog {}\n",
+            tree_path.display(),
+            hooks.tree_ticks,
+            t,
+            hooks.last_status,
+            hooks.goal(),
+            hooks.errors.len(),
+            dir.display()
+        );
+        if hooks.errors.is_empty() {
+            Ok(report)
+        } else {
+            Err(format!(
+                "{report}errors:\n  {}\n",
+                hooks.errors.join("\n  ")
+            ))
         }
     }
 }
