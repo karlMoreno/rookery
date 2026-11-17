@@ -11,15 +11,7 @@ import mujoco
 import pytest
 
 from scene import SceneSpec
-from scene.builder import (
-    GANTRY_HOME,
-    GANTRY_RANGES,
-    HANDLE_RADIUS,
-    HOOK_FINGER,
-    HOOK_RADIUS,
-    HOOK_TIP_RISE,
-    build_scene,
-)
+from scene.builder import GANTRY_HOME, GANTRY_RANGES, build_scene
 
 REPO = Path(__file__).resolve().parents[2]
 JOINTS = ["rail_y", "mast_z", "arm_x", "hook_lift"]
@@ -59,13 +51,14 @@ def dump_limits():
 
 
 def test_hook_geometry_and_home_match_mast():
-    """Drift check (row 4.1): the builder's hook and home equal mast's constants."""
+    """Drift check (rows 4.1, 5.1): the spec's hook and home equal mast's constants."""
     d = dump_limits()
     hook = d["hook"]
-    assert HOOK_FINGER == pytest.approx(hook["finger"])
-    assert HOOK_RADIUS == pytest.approx(hook["radius"])
-    assert HOOK_TIP_RISE == pytest.approx(hook["tip_rise"])
-    assert 2 * HANDLE_RADIUS == pytest.approx(hook["handle_diameter"])
+    s = SceneSpec()
+    assert s.hook_finger == pytest.approx(hook["finger"])
+    assert s.hook_radius == pytest.approx(hook["radius"])
+    assert s.hook_tip_rise == pytest.approx(hook["tip_rise"])
+    assert s.handle_dia == pytest.approx(hook["handle_diameter"])
     assert [GANTRY_HOME[j] for j in JOINTS] == pytest.approx(d["home"])
 
 

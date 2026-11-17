@@ -18,6 +18,7 @@ wrong. This idea was carried over from the throwaway preview's ``Spec``.
   │ handle_height, shelf_gap   (m)        │
   │ exit_tray_pose (x, y, z)   (m)        │
   │ rail_x, guide_rail_height  (m)        │
+  │ handle_dia, hook_* (m), contact       │
   │ preset: None | "drop"                 │
   ├───────────────────────────────────────┤
   │ + cells / tray_size / water_z         │  derived (@property)
@@ -35,7 +36,7 @@ the origin. Rows run along +X and columns along +Y. Units are metres.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 #: Minimum gap between neighbouring fixed parts (tray, exit tray, rail), in metres.
@@ -43,6 +44,9 @@ CLEARANCE = 0.02
 #: Slack on geometric comparisons, so an automatic placement exactly at a
 #: limit is not rejected for float rounding.
 EPS = 1e-9
+
+#: Room the J-hook needs above and below its envelope under a handle, metres.
+MIN_HOOK_CLEARANCE = 0.004
 
 #: Default height of the exit tray's top surface, in metres.
 EXIT_TRAY_Z = 0.10
@@ -59,6 +63,39 @@ class SpecError(ValueError):
     def __init__(self, problems: list[str]) -> None:
         self.problems = problems
         super().__init__("scene spec won't work:\n  - " + "\n  - ".join(problems))
+
+
+@dataclass(frozen=True)
+class ContactParams:
+    """MuJoCo contact settings for the hook, the handles and the box floors
+    (row 5.1). ``None`` leaves MuJoCo's default and writes nothing to the
+    MJCF, so the default ``ContactParams()`` reproduces the Phase 4 scene
+    byte for byte. Row 5.6's sweep picks real values."""
+
+    #: Contact dimensionality: 1 (frictionless), 3 (sliding), 4, or 6.
+    condim: int | None = None
+    #: (sliding, torsional, rolling) friction.
+    friction: tuple[float, float, float] | None = None
+    #: (timeconst, dampratio).
+    solref: tuple[float, float] | None = None
+    #: (dmin, dmax, width, midpoint, power).
+    solimp: tuple[float, float, float, float, float] | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("friction", "solref", "solimp"):
+            v = getattr(self, name)
+            if v is not None:
+                object.__setattr__(self, name, tuple(float(x) for x in v))
+
+    def problems(self) -> list[str]:
+        p: list[str] = []
+        if self.condim is not None and self.condim not in (1, 3, 4, 6):
+            p.append(f"contact.condim must be 1, 3, 4 or 6, got {self.condim!r}")
+        for name, n in (("friction", 3), ("solref", 2), ("solimp", 5)):
+            v = getattr(self, name)
+            if v is not None and len(v) != n:
+                p.append(f"contact.{name} needs {n} numbers, got {v!r}")
+        return p
 
 
 @dataclass(frozen=True)
@@ -80,6 +117,16 @@ class SceneSpec:
     #: to spare above and below. At 3 cm the gap was 18 mm and the tip struck
     #: the handle (found running the row 3.5 tour).
     handle_height: float = 0.045
+    #: Handle capsule diameter.
+    handle_dia: float = 0.012
+    #: J-hook: finger length along +X from the arm tip, its capsule radius,
+    #: and how far the tip turns up above the finger's centreline. These are
+    #: copied in crates/mast/src/kinematics.rs; test_gantry.py fails on drift.
+    hook_finger: float = 0.04
+    hook_radius: float = 0.004
+    hook_tip_rise: float = 0.015
+    #: Contact settings for the hook, handles and box floors (row 5.1).
+    contact: ContactParams = field(default_factory=ContactParams)
     #: Clear vertical space between the top of a tray's handles and the
     #: underside of the tray above it. Matters once ``trays > 1`` (Phase 10).
     shelf_gap: float = 0.08
@@ -119,6 +166,16 @@ class SceneSpec:
     def handle_top_z(self) -> float:
         """Height of a handle's top in the tray frame (boxes rest on the floor)."""
         return self.box_size[2] + self.handle_height
+
+    @property
+    def hook_envelope(self) -> float:
+        """The hook's height from the finger's underside to the top of its tip."""
+        return 2 * self.hook_radius + self.hook_tip_rise
+
+    @property
+    def hook_clearance(self) -> float:
+        """Room above and below the hook's envelope when it is centred under a handle."""
+        return (self.handle_height - self.handle_dia - self.hook_envelope) / 2
 
     @property
     def exit_pose(self) -> tuple[float, float, float]:
@@ -161,6 +218,8 @@ class SceneSpec:
         object.__setattr__(self, "box_size", tuple(float(v) for v in self.box_size))
         if self.exit_tray_pose is not None:
             object.__setattr__(self, "exit_tray_pose", tuple(float(v) for v in self.exit_tray_pose))
+        if isinstance(self.contact, dict):  # read back from rookery.json
+            object.__setattr__(self, "contact", ContactParams(**self.contact))
 
         p: list[str] = []
         for name in ("trays", "rows", "cols"):
@@ -177,11 +236,16 @@ class SceneSpec:
             "handle_height": self.handle_height,
             "shelf_gap": self.shelf_gap,
             "guide_rail_height": self.guide_rail_height,
+            "handle_dia": self.handle_dia,
+            "hook_finger": self.hook_finger,
+            "hook_radius": self.hook_radius,
+            "hook_tip_rise": self.hook_tip_rise,
         }
         lengths.update({f"box_size[{i}]": v for i, v in enumerate(self.box_size)})
         for name, v in lengths.items():
             if not v > 0:  # also catches NaN
                 p.append(f"{name} must be positive, got {v!r}")
+        p += self.contact.problems()
         if self.preset is not None and self.preset not in PRESETS:
             p.append(f"preset {self.preset!r} is unknown; choose one of {list(PRESETS)} or none")
 
@@ -199,6 +263,18 @@ class SceneSpec:
                     f"{self.water_z:.3f}, or the hook has to reach into the water; "
                     "raise box_size height or handle_height, or lower water_depth"
                 )
+            # The J-hook must fit under a handle with room to spare (5.1; the
+            # 3.5 tour found a 3 cm handle left no room at all). Presets such
+            # as the drop scene have no hook or handles, so they skip this.
+            if self.preset is None and self.hook_clearance < MIN_HOOK_CLEARANCE - EPS:
+                p.append(
+                    f"the hook ({self.hook_envelope * 1000:.0f} mm envelope) leaves "
+                    f"{self.hook_clearance * 1000:.1f} mm under a {self.handle_dia * 1000:.0f} mm handle "
+                    f"at handle_height {self.handle_height:.3f}; it needs {MIN_HOOK_CLEARANCE * 1000:.0f} mm "
+                    "above and below. Raise handle_height or shrink the hook"
+                )
+            if self.preset is None and self.hook_finger >= min(self.box_size[0], self.box_size[1]) / 2:
+                p.append(f"hook_finger {self.hook_finger:.3f} must be shorter than half the box")
             # Aisle side, from -X inwards: floor rail | exit tray | tray.
             ex, ey, ez = self.exit_pose
             half = self.exit_tray_half
