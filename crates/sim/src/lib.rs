@@ -57,6 +57,15 @@ pub enum SimError {
     /// A qpos vector whose length is not the model's `nq`.
     #[error("qpos length {got} does not match nq {expected}")]
     QposLen { expected: usize, got: usize },
+    /// [`Sim::set_body_pose`] named a body the model does not have.
+    #[error("no body named `{0}`")]
+    UnknownBody(String),
+    /// [`Sim::set_body_pose`] named a body that is not on a single free joint.
+    #[error("body `{0}` has no free joint of its own, so it cannot be placed")]
+    NotFree(String),
+    /// A quaternion with zero (or non-finite) length, which names no rotation.
+    #[error("quaternion {0:?} has no direction")]
+    BadQuat([f64; 4]),
 }
 
 /// Pose of one MuJoCo body in world coordinates, copied out of `mjData`.

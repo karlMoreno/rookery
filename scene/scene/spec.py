@@ -47,6 +47,10 @@ EPS = 1e-9
 
 #: Box wall thickness, mirrored from builder.BOX_WALL for the crawfish fit check.
 BOX_WALL_FOR_SPEC = 0.003
+#: Box floor thickness, mirrored from builder.BOX_FLOOR for the shell's rest height.
+BOX_FLOOR_FOR_SPEC = 0.004
+#: The ground plane's height, mirrored from builder (-TRAY_WALL).
+GROUND_Z = -0.01
 
 #: Room the J-hook needs above and below its envelope under a handle, metres.
 MIN_HOOK_CLEARANCE = 0.004
@@ -139,6 +143,19 @@ class SceneSpec:
     crawfish_length: float = 0.08
     crawfish_radius: float = 0.012
     crawfish_mass: float = 0.03
+    #: The shed shell in each box (row 7.4): a smaller capsule on its own free
+    #: joint. It waits parked on a pad under its cell, below the ground plane,
+    #: until the lifecycle sets it beside the crawfish after a molt and parks
+    #: it again once eaten (7.5). Only shells touch the pad (``SHELL_GROUP``).
+    shells: bool = True
+    shell_length: float = 0.06
+    shell_radius: float = 0.008
+    shell_mass: float = 0.005
+    #: A shell in its box lies along X this far along +Y from the cell centre,
+    #: beside the crawfish rather than on it.
+    shell_offset_y: float = 0.03
+    #: Height of the park pad's top surface, below the ground plane.
+    shell_park_z: float = -0.3
     #: Contact settings for the hook, handles and box floors (row 5.1).
     contact: ContactParams = field(default_factory=ContactParams)
     #: Clear vertical space between the top of a tray's handles and the
@@ -216,6 +233,18 @@ class SceneSpec:
         """Floor rail length along Y: the tray plus one pitch of overrun at each end."""
         return self.tray_size[1] + 2 * self.cell_pitch
 
+    def shell_in_box(self, r: int, c: int) -> tuple[float, float, float]:
+        """Where shell ``(r, c)`` lies in its box at rest: (x, y, z) of the capsule's
+        centre in the tray frame, beside the crawfish on the box floor (7.4).
+        The shell mover (7.5) adds the box's displacement when the box has moved."""
+        x, y = self.cell_center(r, c)
+        return (x, y + self.shell_offset_y, BOX_FLOOR_FOR_SPEC + self.shell_radius)
+
+    def shell_parked(self, r: int, c: int) -> tuple[float, float, float]:
+        """Where shell ``(r, c)`` rests when parked: on the pad, under its cell."""
+        x, y = self.cell_center(r, c)
+        return (x, y, self.shell_park_z + self.shell_radius)
+
     def cell_center(self, r: int, c: int) -> tuple[float, float]:
         """(x, y) of cell ``(r, c)``, counted from 0, with the grid centred on the origin."""
         if not (0 <= r < self.rows and 0 <= c < self.cols):
@@ -257,6 +286,10 @@ class SceneSpec:
             "crawfish_length": self.crawfish_length,
             "crawfish_radius": self.crawfish_radius,
             "crawfish_mass": self.crawfish_mass,
+            "shell_length": self.shell_length,
+            "shell_radius": self.shell_radius,
+            "shell_mass": self.shell_mass,
+            "shell_offset_y": self.shell_offset_y,
         }
         lengths.update({f"box_size[{i}]": v for i, v in enumerate(self.box_size)})
         for name, v in lengths.items():
@@ -298,6 +331,18 @@ class SceneSpec:
                     p.append("crawfish_length must be at least twice crawfish_radius")
                 if 2 * self.crawfish_radius >= self.box_size[2]:
                     p.append("the crawfish is taller than the box walls")
+            if self.preset is None and self.shells:
+                inner = min(self.box_size[0], self.box_size[1]) - 2 * BOX_WALL_FOR_SPEC
+                if self.shell_length > inner - 2 * CLEARANCE / 4:
+                    p.append(f"shell_length {self.shell_length:.3f} does not fit inside the box ({inner:.3f})")
+                if self.shell_length < 2 * self.shell_radius:
+                    p.append("shell_length must be at least twice shell_radius")
+                if self.shell_offset_y + self.shell_radius > inner / 2:
+                    p.append(f"shell_offset_y {self.shell_offset_y:.3f} puts the shell through the box wall")
+                if self.crawfish and self.shell_offset_y - self.shell_radius < self.crawfish_radius:
+                    p.append(f"shell_offset_y {self.shell_offset_y:.3f} puts the shell on top of the crawfish")
+                if self.shell_park_z > GROUND_Z - 0.1:
+                    p.append(f"shell_park_z {self.shell_park_z:.3f} must be at least 0.1 m below the ground ({GROUND_Z})")
             if self.preset is None and self.hook_width < 0:
                 p.append(f"hook_width must be ≥ 0, got {self.hook_width}")
             if self.preset is None and self.hook_width >= self.box_size[1] - 0.04:

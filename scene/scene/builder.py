@@ -11,6 +11,7 @@ at the end:
     .water()       geom water: translucent, contact-free           (2.3)
     .cells()       box_r_c + handle_r_c, row-major                 (2.4)
     .crawfish()    crawfish_r_c capsule + touch_r_c sensor          (5.2)
+    .shells()      shell_r_c capsules, parked on a pad below ground (7.4)
     .exit_tray()   geom exit_tray between tray and rail            (2.5)
     .crane_frame() floor_rail + guide_rail (static, contact-free)  (2.5)
     .gantry()      rail_y → mast_z → arm_x → hook_lift, actuators   (3.2)
@@ -59,6 +60,21 @@ POST_RADIUS = 0.003
 HANDLE_RGBA = (0.9, 0.85, 0.2, 1.0)
 EXIT_RGBA = (0.2, 0.6, 0.3, 1.0)
 CRAWFISH_RGBA = (0.7, 0.25, 0.2, 1.0)
+#: A shed shell: pale and translucent, so it reads as empty.
+SHELL_RGBA = (0.95, 0.75, 0.6, 0.6)
+#: Collision bits (row 7.4). MuJoCo lets geoms a and b collide when
+#: ``a.contype & b.conaffinity`` or ``b.contype & a.conaffinity`` is non-zero.
+#: Every other geom keeps the default 1/1.
+#:
+#: ```text
+#:   geom        contype  conaffinity   touches
+#:   default        1         1         everything below except the pad
+#:   shell          2         1         boxes, hook (not other shells, not the ground)
+#:   park pad       0         2         shells only
+#:   ground         4         1         default geoms only, so a shell passes under it
+#: ```
+SHELL_GROUP = 2
+GROUND_CONTYPE = 4
 #: Drop preset: cube edge and release height, in metres (Phase 1 gate: rest at DROP_BOX / 2).
 DROP_BOX = 0.1
 DROP_HEIGHT = 0.5
@@ -176,8 +192,10 @@ class MjcfBuilder:
         span = max(s.tray_size[1], s.tray_size[0] / 2 - s.rail_line_x) + 2 * TRAY_WALL
         self._el(wb, "camera", [("name", "overview"),
                                 *look_at((cx + 0.35 * span, -1.25 * span, 1.0 * span), (cx, 0, 0.15))])
+        # With shells (7.4) the ground lets them through to their park pad below it.
+        ground_bits = [("contype", str(GROUND_CONTYPE)), ("conaffinity", "1")] if s.shells else []
         self._el(wb, "geom", [("name", "ground"), ("type", "plane"), ("size", num(2, 2, 0.1)),
-                              ("pos", num(0, 0, -TRAY_WALL)), ("rgba", num(0.3, 0.32, 0.3, 1))])
+                              ("pos", num(0, 0, -TRAY_WALL)), ("rgba", num(0.3, 0.32, 0.3, 1)), *ground_bits])
         return self
 
     def tray(self) -> MjcfBuilder:
@@ -304,6 +322,55 @@ class MjcfBuilder:
                 self._el(body, "site", [("name", f"crawfish_{tag}_site"), ("type", "capsule"),
                                         ("fromto", num(-half, 0, 0, half, 0, 0)), ("size", num(r * 1.1))])
                 self._el(sensor, "touch", [("name", f"touch_{tag}"), ("site", f"crawfish_{tag}_site")])
+        return self
+
+    def shells(self) -> MjcfBuilder:
+        """One shed shell per box (row 7.4): body ``shell_r_c``, a capsule on its
+        own free joint, plus one static pad ``shell_park`` under the tray.
+
+        ```text
+          z = 0      ── tray floor ──[box r_c: crawfish | shell (when molted)]──
+          z = -0.01  ── ground plane (lets shells through: GROUND_CONTYPE)
+          z = park   ── shell_park pad, hidden (group 3): parked shells lie here,
+                        each under its own cell
+        ```
+
+        A shell starts parked. The lifecycle (7.5) moves it into its box with
+        ``Sim::set_body_pose`` on ``Molted`` and parks it again on
+        ``ShellEaten``. In a box it rests on the floor beside the crawfish
+        (``spec.shell_in_box``) and rides along when the box is lifted. A
+        ``<contact><exclude>`` keeps it from colliding with its own crawfish,
+        so it never pushes the animal.
+
+        Why a pad under the ground rather than deleting and re-adding bodies:
+        MuJoCo models are fixed once compiled, so every shell must exist from
+        the start. Below the ground nothing else can reach it, and it stays
+        out of the overview camera.
+        """
+        s = self.spec
+        if not s.shells:
+            return self
+        hx, hy = s.tray_size[0] / 2, s.tray_size[1] / 2
+        t = TRAY_WALL
+        self._el(self.worldbody, "geom", [("name", "shell_park"), ("type", "box"),
+                                          ("size", num(hx, hy, t / 2)), ("pos", num(0, 0, s.shell_park_z - t / 2)),
+                                          ("contype", "0"), ("conaffinity", str(SHELL_GROUP)), ("group", "3"),
+                                          ("rgba", num(*TRAY_RGBA))])
+        r = s.shell_radius
+        half = s.shell_length / 2 - r
+        contact = self._el(self.root, "contact") if s.crawfish else None
+        for row in range(s.rows):
+            for col in range(s.cols):
+                tag = f"{row}_{col}"
+                body = self._el(self.worldbody, "body", [("name", f"shell_{tag}"),
+                                                          ("pos", num(*s.shell_parked(row, col)))])
+                self._el(body, "freejoint", [("name", f"shell_{tag}_free")])
+                self._el(body, "geom", [("name", f"shell_{tag}_body"), ("type", "capsule"),
+                                        ("fromto", num(-half, 0, 0, half, 0, 0)), ("size", num(r)),
+                                        ("mass", num(s.shell_mass)), ("contype", str(SHELL_GROUP)),
+                                        ("conaffinity", "1"), ("rgba", num(*SHELL_RGBA))])
+                if contact is not None:
+                    self._el(contact, "exclude", [("body1", f"shell_{tag}"), ("body2", f"crawfish_{tag}")])
         return self
 
     def exit_tray(self) -> MjcfBuilder:
@@ -492,7 +559,7 @@ def build_scene(spec: SceneSpec) -> str:
     """The scene for ``spec``: the named preset, or else the farm."""
     if spec.preset == "drop":
         return MjcfBuilder(spec).drop().build()
-    return MjcfBuilder(spec).header().tray().water().cells().crawfish().exit_tray().crane_frame().gantry().build()
+    return MjcfBuilder(spec).header().tray().water().cells().crawfish().shells().exit_tray().crane_frame().gantry().build()
 
 
 def spec_from_json(text: str) -> SceneSpec:

@@ -38,6 +38,7 @@
 //!   │ + body_index(&self, name)           │    (no FFI)
 //!   │ + timestep(&self) -> f64            │──▶ reads opt.timestep
 //!   │ + qpos(&self) -> Vec<f64>           │──▶ copies qpos
+//!   │ + set_body_pose(&mut self, name, …) │──▶ writes one free joint, mj_forward
 //!   │ ~ drop: mj_deleteData, mj_deleteModel
 //!   └─────────────────────────────────────┘
 //! ```
@@ -52,6 +53,12 @@ use crate::{BodyState, SimError, Snapshot, Targets};
 /// Size of the buffer `mj_loadXML` writes its error message into. MuJoCo's
 /// own samples use 1000 bytes.
 const ERROR_BUF_LEN: usize = 1000;
+
+/// `mjJNT_FREE` from MuJoCo's `mjtJoint` enum (`mjmodel.h`): a free joint,
+/// 7 qpos values (position, then quaternion `[w, x, y, z]`) and 6 dofs.
+/// The enum itself is outside the bindgen allowlist, so its one value
+/// Rookery needs is copied here.
+const MJ_JNT_FREE: c_int = 0;
 
 /// The Facade itself: one loaded MuJoCo model plus its simulation data.
 ///
@@ -280,6 +287,86 @@ impl Sim {
         Ok(())
     }
 
+    /// Place the body called `name` at world position `pos` with orientation
+    /// `quat` (`[w, x, y, z]`, normalised here) and stop it: its free
+    /// joint's 7 `qpos` values are overwritten, its 6 `qvel` values zeroed,
+    /// then `mj_forward` recomputes everything derived. Time does not move.
+    ///
+    /// Row 7.4: the lifecycle moves a shed shell into its box after a molt
+    /// and parks it again once it is eaten. A free joint's qpos is in world
+    /// coordinates because MuJoCo only allows one on a top-level body.
+    ///
+    /// # Errors
+    /// [`SimError::UnknownBody`] for a name the model lacks,
+    /// [`SimError::NotFree`] unless the body has exactly one joint and it is
+    /// free, and [`SimError::BadQuat`] for a zero or non-finite quaternion.
+    /// On any error nothing changes.
+    pub fn set_body_pose(
+        &mut self,
+        name: &str,
+        pos: [f64; 3],
+        quat: [f64; 4],
+    ) -> Result<(), SimError> {
+        let norm = quat.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if !(norm.is_finite() && norm > 0.0) || pos.iter().any(|v| !v.is_finite()) {
+            return Err(SimError::BadQuat(quat));
+        }
+        let id = self
+            .body_index(name)
+            .ok_or_else(|| SimError::UnknownBody(name.to_owned()))?;
+        // SAFETY: invariant 1, so `model` is non-null and valid. `id < nbody`
+        // because `body_index` searched `body_names`, which has exactly
+        // `nbody` entries (set at load), and `body_jntnum` / `body_jntadr`
+        // are `nbody` ints each. Reading does not mutate the model.
+        let (jntnum, jnt) = unsafe {
+            (
+                *(*self.model).body_jntnum.add(id),
+                *(*self.model).body_jntadr.add(id),
+            )
+        };
+        if jntnum != 1 || jnt < 0 {
+            return Err(SimError::NotFree(name.to_owned()));
+        }
+        let jnt = jnt as usize; // checked non-negative above
+        // SAFETY: invariant 1. `jnt` is the body's first joint, so `jnt < njnt`
+        // (MuJoCo's compiler guarantees `body_jntadr` points into the joint
+        // arrays when `body_jntnum > 0`), and `jnt_type`, `jnt_qposadr` and
+        // `jnt_dofadr` are `njnt` ints each.
+        let (kind, qadr, dadr) = unsafe {
+            let m = &*self.model;
+            (
+                *m.jnt_type.add(jnt),
+                *m.jnt_qposadr.add(jnt),
+                *m.jnt_dofadr.add(jnt),
+            )
+        };
+        if kind != MJ_JNT_FREE || qadr < 0 || dadr < 0 {
+            return Err(SimError::NotFree(name.to_owned()));
+        }
+        let (qadr, dadr) = (qadr as usize, dadr as usize);
+        let q = [
+            pos[0],
+            pos[1],
+            pos[2],
+            quat[0] / norm,
+            quat[1] / norm,
+            quat[2] / norm,
+            quat[3] / norm,
+        ];
+        // SAFETY: invariants 1, 2 and 3. A free joint owns qpos[qadr..qadr + 7]
+        // and qvel[dadr..dadr + 6], which MuJoCo's compiler lays out inside
+        // `nq` and `nv` (the arrays `mj_makeData(model)` sized, invariant 2).
+        // `&mut self` is exclusive while the two slices live, and they are
+        // different arrays, so they do not alias. mj_forward only writes `data`.
+        unsafe {
+            let d = &mut *self.data;
+            std::slice::from_raw_parts_mut(d.qpos.add(qadr), 7).copy_from_slice(&q);
+            std::slice::from_raw_parts_mut(d.qvel.add(dadr), 6).fill(0.0);
+            ffi::mj_forward(self.model, self.data);
+        }
+        Ok(())
+    }
+
     /// Index of the body called `name` in [`Snapshot::bodies`] (equal to its
     /// MuJoCo body id), or `None` if the model has no such body.
     pub fn body_index(&self, name: &str) -> Option<usize> {
@@ -458,6 +545,67 @@ mod tests {
                 got: 1
             })
         ));
+    }
+
+    #[test]
+    fn set_body_pose_places_a_free_body_and_stops_it() {
+        let mut sim = load_str(
+            "pose",
+            r#"<mujoco><option timestep="0.001"/><worldbody>
+                 <geom type="plane" size="1 1 .1"/>
+                 <body name="a" pos="0 0 .5"><freejoint/><geom type="sphere" size=".02"/></body>
+                 <body name="b" pos=".5 0 .5"><freejoint/><geom type="sphere" size=".02"/></body>
+                 <body name="hinged" pos=".3 0 .5"><joint type="hinge"/><geom type="sphere" size=".02"/></body>
+               </worldbody></mujoco>"#,
+        );
+        for _ in 0..200 {
+            sim.step(); // both spheres are falling now
+        }
+        // b's free joint is qpos[7..14]. (Compare qpos, not xpos: a snapshot
+        // taken after a step shows xpos from that step's start.)
+        let b_before = sim.qpos()[7..14].to_vec();
+        let t = sim.snapshot().time;
+        let half = std::f64::consts::FRAC_1_SQRT_2;
+        // An unnormalised quaternion is fine: a quarter turn about Z.
+        sim.set_body_pose("a", [0.2, -0.1, 0.3], [2.0, 0.0, 0.0, 2.0])
+            .expect("a is free");
+        let s = sim.snapshot();
+        let a = &s.bodies[sim.body_index("a").unwrap()];
+        assert_eq!(s.time, t, "no time passes");
+        assert_eq!(a.pos, [0.2, -0.1, 0.3]);
+        for (got, want) in a.quat.iter().zip([half, 0.0, 0.0, half]) {
+            assert!((got - want).abs() < 1e-12, "{:?}", a.quat);
+        }
+        assert_eq!(sim.qpos()[7..14].to_vec(), b_before, "only a moved");
+        // Stopped: after one step it has dropped by about g·dt² (10 µm), not
+        // the 2 mm a step its old 2 m/s speed would take. The second step's
+        // snapshot is the one that shows where the first step left it.
+        sim.step();
+        sim.step();
+        let z = sim.snapshot().bodies[sim.body_index("a").unwrap()].pos[2];
+        assert!((0.3 - z) < 2e-5, "a kept falling at its old speed: z = {z}");
+
+        assert!(matches!(
+            sim.set_body_pose("nope", [0.0; 3], [1.0, 0.0, 0.0, 0.0]),
+            Err(SimError::UnknownBody(_))
+        ));
+        assert!(matches!(
+            sim.set_body_pose("hinged", [0.0; 3], [1.0, 0.0, 0.0, 0.0]),
+            Err(SimError::NotFree(_))
+        ));
+        assert!(matches!(
+            sim.set_body_pose("world", [0.0; 3], [1.0, 0.0, 0.0, 0.0]),
+            Err(SimError::NotFree(_))
+        ));
+        assert!(matches!(
+            sim.set_body_pose("a", [0.0; 3], [0.0; 4]),
+            Err(SimError::BadQuat(_))
+        ));
+        assert_eq!(
+            sim.snapshot().bodies[sim.body_index("a").unwrap()].pos[2],
+            z,
+            "errors change nothing"
+        );
     }
 
     #[test]

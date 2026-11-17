@@ -6,9 +6,9 @@
 //! [`runner::NoHooks`]. If the scene has a body named `box` (the Phase 1 drop
 //! scene), it then prints that body's final height.
 //!
-//! - Phase 2 demo: `rookery scene/generated/rookery.xml` gives `nbody 38`
-//!   (world, tray_0, 16 boxes, 16 crawfish, crane_truck/carriage/arm/hook; the exit tray
-//!   and rails are world geoms).
+//! - Phase 2 demo: `rookery scene/generated/rookery.xml` gives `nbody 54`
+//!   (world, tray_0, 16 boxes, 16 crawfish, 16 shells, crane_truck/carriage/arm/hook;
+//!   the exit tray, rails and shell park pad are world geoms).
 //! - Phase 1 demo: `rookery scene/generated/drop.xml` ends with `box z 0.049892`.
 //!
 //! ```text
@@ -105,7 +105,7 @@ fn main() -> ExitCode {
 /// testable.
 ///
 /// ```text
-///   nbody 38
+///   nbody 54
 ///   bodies world tray_0 box_0_0 ... box_3_3
 ///   box z 0.049892        (only when the scene has a body named `box`)
 /// ```
