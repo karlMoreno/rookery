@@ -16,6 +16,7 @@ sim = { path = "../../crates/sim" }
 mast = { path = "../../crates/mast" }
 proptest = "1"
 bt = { path = "../../crates/bt" }
+rookery-core = { path = "../../crates/rookery-core" }
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 
 [lints]

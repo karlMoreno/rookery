@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rand = "0.9"
+rand_chacha = "0.9"
+rand_distr = "0.5"
 
 [lints]
 workspace = true
