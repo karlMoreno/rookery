@@ -7,6 +7,6 @@ means changing arguments and regenerating, and the output is byte-identical
 for the same arguments.
 """
 
-from .spec import PRESETS, SceneSpec, SpecError
+from .spec import PRESETS, ContactParams, SceneSpec, SpecError
 
-__all__ = ["PRESETS", "SceneSpec", "SpecError"]
+__all__ = ["PRESETS", "ContactParams", "SceneSpec", "SpecError"]

@@ -52,8 +52,8 @@ BOX_WALL = 0.003
 BOX_FLOOR = 0.004
 BOX_MASS = 0.12  # kg, an empty plastic mesh box
 BOX_RGBA = (0.85, 0.45, 0.15, 1.0)
-#: Hook handle: capsule radius and the radius of the two posts holding it.
-HANDLE_RADIUS = 0.006
+#: Radius of the two posts holding each handle. The handle's own size is
+#: SceneSpec.handle_dia (row 5.1).
 POST_RADIUS = 0.003
 HANDLE_RGBA = (0.9, 0.85, 0.2, 1.0)
 EXIT_RGBA = (0.2, 0.6, 0.3, 1.0)
@@ -79,13 +79,8 @@ GANTRY_KP = {"rail_y": 600.0, "mast_z": 300.0, "arm_x": 200.0, "hook_lift": 100.
 GANTRY_MASS = {"rail_y": 5.0, "mast_z": 1.0, "arm_x": 0.5, "hook_lift": 0.1}
 CRANE_RGBA = (0.85, 0.75, 0.2, 1.0)
 HOOK_RGBA = (0.8, 0.2, 0.2, 1.0)
-#: Hook finger: radius and length along +X from the arm tip.
-HOOK_RADIUS = 0.004
-HOOK_FINGER = 0.04
-#: How far the hook's tip turns up above the finger. HOOK_*, HANDLE_RADIUS and
-#: GANTRY_HOME are duplicated in crates/mast/src/kinematics.rs; test_gantry.py
-#: fails on drift (row 4.1).
-HOOK_TIP_RISE = 0.015
+# The hook's sizes are SceneSpec.hook_* (row 5.1). They and GANTRY_HOME are
+# duplicated in crates/mast/src/kinematics.rs; test_gantry.py fails on drift.
 #: Half-section of the floor and guide rails, in metres.
 RAIL_HALF = 0.02
 RAIL_RGBA = (0.35, 0.37, 0.42, 1.0)
@@ -136,6 +131,21 @@ class MjcfBuilder:
                 self._names.add((kind, v))
             el.set(k, v)
         return el
+
+    def _contact(self) -> list[tuple[str, str]]:
+        """Contact attributes from spec.contact, only for the fields that are
+        set, so the default writes nothing (byte-identical to Phase 4)."""
+        c = self.spec.contact
+        out: list[tuple[str, str]] = []
+        if c.condim is not None:
+            out.append(("condim", str(c.condim)))
+        if c.friction is not None:
+            out.append(("friction", num(*c.friction)))
+        if c.solref is not None:
+            out.append(("solref", num(*c.solref)))
+        if c.solimp is not None:
+            out.append(("solimp", num(*c.solimp)))
+        return out
 
     @property
     def worldbody(self) -> ET.Element:
@@ -226,8 +236,9 @@ class MjcfBuilder:
         parts = 1 + 4  # floor + walls share the mass evenly by count
         m = BOX_MASS / parts
         rgba = ("rgba", num(*BOX_RGBA))
-        handle_z = s.handle_top_z - HANDLE_RADIUS
-        handle_half = hy - t - HANDLE_RADIUS
+        handle_r = s.handle_dia / 2
+        handle_z = s.handle_top_z - handle_r
+        handle_half = hy - t - handle_r
         post_half = (handle_z - h) / 2
         for r in range(s.rows):
             for c in range(s.cols):
@@ -237,7 +248,7 @@ class MjcfBuilder:
                 self._el(body, "freejoint", [("name", f"box_{tag}_free")])
                 self._el(body, "geom", [("name", f"box_{tag}_floor"), ("type", "box"),
                                         ("size", num(hx, hy, f / 2)), ("pos", num(0, 0, f / 2)),
-                                        ("mass", num(m)), rgba])
+                                        ("mass", num(m)), rgba, *self._contact()])
                 walls = (
                     ("xneg", (-(hx - t / 2), 0), (t / 2, hy)),
                     ("xpos", (hx - t / 2, 0), (t / 2, hy)),
@@ -256,8 +267,8 @@ class MjcfBuilder:
                                             ("mass", num(0.002)), ("rgba", num(*HANDLE_RGBA))])
                 self._el(body, "geom", [("name", f"handle_{tag}"), ("type", "capsule"),
                                         ("fromto", num(0, -handle_half, handle_z, 0, handle_half, handle_z)),
-                                        ("size", num(HANDLE_RADIUS)), ("mass", num(0.005)),
-                                        ("rgba", num(*HANDLE_RGBA))])
+                                        ("size", num(handle_r)), ("mass", num(0.005)),
+                                        ("rgba", num(*HANDLE_RGBA)), *self._contact()])
         return self
 
     def exit_tray(self) -> MjcfBuilder:
@@ -399,11 +410,12 @@ class MjcfBuilder:
         hr = ("rgba", num(*HOOK_RGBA))
         # J-hook: a finger along +X at hook height with an upturned tip, so it
         # slides under a handle (a capsule along Y) and catches it when lifted.
-        self._el(hook, "geom", [("name", "hook"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
-                                ("fromto", num(0, 0, 0, HOOK_FINGER, 0, 0)), hr])
-        self._el(hook, "geom", [("name", "hook_tip"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
-                                ("fromto", num(HOOK_FINGER, 0, 0, HOOK_FINGER, 0, HOOK_TIP_RISE)), hr])
-        self._el(hook, "geom", [("name", "hook_stem"), ("type", "capsule"), ("size", num(HOOK_RADIUS)),
+        hr_, hf = s.hook_radius, s.hook_finger
+        self._el(hook, "geom", [("name", "hook"), ("type", "capsule"), ("size", num(hr_)),
+                                ("fromto", num(0, 0, 0, hf, 0, 0)), hr, *self._contact()])
+        self._el(hook, "geom", [("name", "hook_tip"), ("type", "capsule"), ("size", num(hr_)),
+                                ("fromto", num(hf, 0, 0, hf, 0, s.hook_tip_rise)), hr, *self._contact()])
+        self._el(hook, "geom", [("name", "hook_stem"), ("type", "capsule"), ("size", num(hr_)),
                                 ("fromto", num(0, 0, 0, 0, 0, 0.02)), *free, hr])
 
         actuator = self._el(self.root, "actuator")
