@@ -331,12 +331,16 @@ class MjcfBuilder:
         ```text
           z = 0      ── tray floor ──[box r_c: crawfish | shell (when molted)]──
           z = -0.01  ── ground plane (lets shells through: GROUND_CONTYPE)
-          z = park   ── shell_park pad, hidden (group 3): parked shells lie here,
-                        each under its own cell
+          z = park   ── shell_park pad, hidden (group 3): parked shells hover 2 mm
+                        above it, each under its own cell
         ```
 
-        A shell starts parked. The lifecycle (7.5) moves it into its box with
-        ``Sim::set_body_pose`` on ``Molted`` and parks it again on
+        A shell starts parked with ``gravcomp="1"``: its weight is cancelled,
+        so it hovers in place and touches nothing (row 7.5). Resting on the
+        pad instead cost two contacts per shell, which made every physics
+        step about 27% slower. The lifecycle (7.5) moves it into its box
+        with ``Sim::set_body_pose`` and turns its gravity on with
+        ``Sim::set_gravcomp(name, 0)`` on ``Molted``, then reverses both on
         ``ShellEaten``. In a box it rests on the floor beside the crawfish
         (``spec.shell_in_box``) and rides along when the box is lifted. A
         ``<contact><exclude>`` keeps it from colliding with its own crawfish,
@@ -363,7 +367,8 @@ class MjcfBuilder:
             for col in range(s.cols):
                 tag = f"{row}_{col}"
                 body = self._el(self.worldbody, "body", [("name", f"shell_{tag}"),
-                                                          ("pos", num(*s.shell_parked(row, col)))])
+                                                          ("pos", num(*s.shell_parked(row, col))),
+                                                          ("gravcomp", "1")])
                 self._el(body, "freejoint", [("name", f"shell_{tag}_free")])
                 self._el(body, "geom", [("name", f"shell_{tag}_body"), ("type", "capsule"),
                                         ("fromto", num(-half, 0, 0, half, 0, 0)), ("size", num(r)),

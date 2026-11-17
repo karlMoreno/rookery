@@ -24,6 +24,7 @@ mod lift_trials;
 mod runner;
 mod scenario;
 mod script;
+mod shells;
 mod tour;
 
 use std::num::NonZeroUsize;
@@ -390,6 +391,16 @@ mod tests {
             .filter(|e| e.as_str().unwrap().contains("Molted"))
             .count();
         assert!(molts > 0, "no molts in a week");
+        // Row 7.5: every molt put a shell in its box, and nothing else moved.
+        let shells = summary["shells"].as_array().unwrap();
+        assert_eq!(shells.len(), molts, "{shells:?}");
+        assert!(
+            shells
+                .iter()
+                .all(|s| s.as_str().unwrap().contains("inside: true")),
+            "{shells:?}"
+        );
+        assert!(summary["max_box_displacement"].as_f64().unwrap() < 0.002);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -681,9 +692,17 @@ mod tour_cmd {
                 c: (i % meta.cols) as u8,
             })
             .collect();
-        let world =
+        let mut world =
             rookery_core::World::new(rookery_core::LifecycleParams::default(), args.seed, &cells);
-        let mut hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?.with_world(world);
+        let mover = crate::shells::ShellMover::subscribe(
+            &sim,
+            &args.scene.with_extension("json"),
+            &meta,
+            &mut world,
+        )?;
+        let mut hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?
+            .with_world(world)
+            .with_shells(mover);
         hooks.fault_at = args.fault_at;
         let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
         let first_qpos = sim.qpos();
@@ -707,7 +726,12 @@ mod tour_cmd {
             runner.run(every);
             phys_steps += every;
         }
-        let box_moved = crate::scenario::max_box_displacement(&first_qpos, &runner.sim().qpos());
+        // Boxes and crawfish: shells move by design (row 7.5).
+        let box_moved = crate::scenario::max_box_displacement(
+            &first_qpos,
+            &runner.sim().qpos(),
+            2 * hooks_meta_rows * hooks_meta_cols,
+        );
 
         let hooks = runner.hooks();
         if let Some(e) = hooks.crane().io_error() {
@@ -733,6 +757,7 @@ mod tour_cmd {
             "bio_time": hooks.bio_time(),
             "bio_events": hooks.bio_events.iter().map(|(t, e)| format!("{t:.0} {e:?}")).collect::<Vec<_>>(),
             "max_box_displacement": box_moved,
+            "shells": hooks.shells.as_ref().map(|m| m.checks.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>()),
         });
         fs::write(
             dir.join("summary.json"),
@@ -763,6 +788,19 @@ mod tour_cmd {
                     hooks_meta_rows,
                     hooks_meta_cols,
                 ),
+                events: hooks
+                    .bio_events
+                    .iter()
+                    .map(|&(t, e)| {
+                        let (kind, cell) = crate::bt_hooks::describe(e);
+                        (t, kind, cell)
+                    })
+                    .collect(),
+                shells: hooks
+                    .shells
+                    .as_ref()
+                    .map(|m| m.checks.clone())
+                    .unwrap_or_default(),
             };
             let (ok, msg) = s.check(&log)?;
             let verdict = format!(

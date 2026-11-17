@@ -1,4 +1,4 @@
-//! Row 7.3: the molt state machine.
+//! Rows 7.3 and 7.5: the molt state machine, shells and the world.
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -133,6 +133,7 @@ fn fast_forward_and_fine_steps_give_each_cell_the_same_history() {
             let (c, k) = match e {
                 Event::Molted(c) => (c, "molted"),
                 Event::WindowClosing(c) => (c, "window"),
+                Event::ShellEaten(c) => (c, "eaten"),
                 _ => continue,
             };
             m.entry(c).or_default().push(k);
@@ -154,4 +155,99 @@ fn fast_forward_and_fine_steps_give_each_cell_the_same_history() {
     let (a, b) = (per_cell(fine_events), per_cell(ff_events));
     assert!(!a.is_empty());
     assert_eq!(a, b);
+}
+
+#[test]
+fn every_shell_is_eaten_shell_delay_after_its_molt() {
+    // Row 7.5: Molted starts the shell's clock, and ShellEaten follows
+    // exactly `shell_delay` later, to within one step.
+    let cells: Vec<CellId> = (0..16).map(cell).collect();
+    let p = LifecycleParams::default();
+    let mut w = World::new(p, 11, &cells);
+    let dt = 60.0;
+    let mut molted_at = std::collections::HashMap::new();
+    let (mut molts, mut eaten) = (0, 0);
+    for i in 0..(60.0 * DAY / dt) as usize {
+        let t = (i + 1) as f64 * dt;
+        for e in w.step(dt) {
+            match e {
+                Event::Molted(c) => {
+                    assert!(
+                        molted_at.insert(c, t).is_none(),
+                        "a second molt before the shell was eaten"
+                    );
+                    molts += 1;
+                }
+                Event::ShellEaten(c) => {
+                    let m = molted_at.remove(&c).expect("a shell eaten without a molt");
+                    assert!(
+                        ((t - m) - p.shell_delay).abs() <= dt,
+                        "eaten {} s after the molt",
+                        t - m
+                    );
+                    eaten += 1;
+                }
+                _ => {}
+            }
+        }
+        for (k, (c, _)) in w.animals().iter().enumerate() {
+            assert_eq!(w.has_shell(k), molted_at.contains_key(c));
+        }
+    }
+    assert!(
+        molts >= 16 && eaten >= molts - 16,
+        "{molts} molts, {eaten} eaten"
+    );
+}
+
+#[test]
+fn fast_forward_stops_for_a_shell_being_eaten() {
+    let cells = [cell(0)];
+    let p = LifecycleParams::default();
+    let mut w = World::new(p, 3, &cells);
+    // Jump until the molt.
+    while !w
+        .step(w.time_to_next_transition() + 1e-6)
+        .contains(&Event::Molted(cell(0)))
+    {}
+    assert!(w.has_shell(0));
+    // From here the next things due are Molting's end (an hour), the soft
+    // window... and the shell, a day after the molt. Fast-forward never
+    // jumps past it.
+    let mut t = 0.0;
+    loop {
+        let dt = w.time_to_next_transition() + 1e-6;
+        t += dt;
+        if w.step(dt).contains(&Event::ShellEaten(cell(0))) {
+            break;
+        }
+        assert!(t < p.shell_delay, "jumped past the shell");
+    }
+    assert!((t - p.shell_delay).abs() < 1e-3, "eaten at {t}");
+    assert!(!w.has_shell(0));
+}
+
+#[test]
+fn every_cell_has_water_that_stays_in_bounds_for_a_year() {
+    let cells: Vec<CellId> = (0..16).map(cell).collect();
+    let mut w = World::new(LifecycleParams::default(), 2, &cells);
+    let mut t = 0.0;
+    while t < 365.0 * DAY {
+        let dt = w.time_to_next_transition() + 1e-6;
+        w.step(dt);
+        t += dt;
+    }
+    let p = w.bio_params;
+    assert_eq!(w.bio().len(), 16);
+    for b in w.bio() {
+        assert!(
+            (0.0..=p.o2_sat).contains(&b.o2()) && (0.0..=p.waste_max).contains(&b.waste()),
+            "{b:?}"
+        );
+        // With one animal per cell, oxygen settles at its equilibrium.
+        assert!(
+            (b.o2() - (p.o2_sat - p.o2_uptake / p.k_air)).abs() < 1e-6,
+            "{b:?}"
+        );
+    }
 }

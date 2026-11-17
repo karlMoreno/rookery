@@ -14,7 +14,8 @@
 //!
 //! `log` is a plain table built after the run:
 //! `{ ticks, sim_time, visited = { {r, c} | "exit" ... }, visited_cells,
-//!    errors = { "leaf: msg", ... }, max_box_displacement, final_q }`.
+//!    errors = { "leaf: msg", ... }, max_box_displacement, final_q, moved_boxes,
+//!    events = { {t, kind, tray, r, c} ... }, shells = { ["r,c"] = {inside, t, offset} } }`.
 //! `visited` lists arrivals in order; `visited_cells` is the number of
 //! distinct cells among them.
 //!
@@ -49,6 +50,10 @@ pub struct RunLog {
     pub final_q: [f64; 4],
     /// Cells whose box moved more than 1 mm during the run (row 6.5).
     pub moved_boxes: Vec<(usize, usize)>,
+    /// Lifecycle events with their biological time (row 7.5).
+    pub events: Vec<(f64, &'static str, rookery_core::CellId)>,
+    /// Where each shed shell lay a tick after it was put in its box (row 7.5).
+    pub shells: Vec<crate::shells::ShellCheck>,
 }
 
 impl Scenario {
@@ -151,6 +156,31 @@ impl Scenario {
             moved.set(i + 1, lua.create_sequence_from([*r, *c])?)?;
         }
         t.set("moved_boxes", moved)?;
+        let events = lua.create_table()?;
+        for (i, (time, kind, cell)) in log.events.iter().enumerate() {
+            let e = lua.create_table()?;
+            e.set("t", *time)?;
+            e.set("kind", *kind)?;
+            e.set("tray", cell.tray)?;
+            e.set("r", cell.r)?;
+            e.set("c", cell.c)?;
+            events.set(i + 1, e)?;
+        }
+        t.set("events", events)?;
+        // shells["r,c"] = { inside, t, offset = {x, y, z} }. A cell that molts
+        // twice keeps `inside` only if both shells were inside.
+        let shells = lua.create_table()?;
+        for s in &log.shells {
+            let key = format!("{},{}", s.cell.r, s.cell.c);
+            let before: Option<Table> = shells.get(key.as_str())?;
+            let was_inside = before.map_or(Ok(true), |b| b.get::<bool>("inside"))?;
+            let e = lua.create_table()?;
+            e.set("inside", s.inside && was_inside)?;
+            e.set("t", s.t)?;
+            e.set("offset", lua.create_sequence_from(s.offset)?)?;
+            shells.set(key, e)?;
+        }
+        t.set("shells", shells)?;
         Ok(t)
     }
 }
@@ -169,14 +199,14 @@ pub fn moved_boxes(first: &[f64], last: &[f64], rows: usize, cols: usize) -> Vec
         .collect()
 }
 
-/// The largest position change of any free-joint body between two qpos
-/// vectors. The scene builder emits the free joints first (7 values each:
-/// boxes, then crawfish, then shells) and the crane's 4 slides last, so the
-/// free bodies are the first `(nq - 4) / 7` blocks. Parked shells lie still,
-/// so they only count once the lifecycle moves one (7.5).
-pub fn max_box_displacement(first: &[f64], last: &[f64]) -> f64 {
+/// The largest position change among the first `bodies` free-joint bodies
+/// between two qpos vectors. The scene builder emits the free joints first
+/// (7 values each: boxes, then crawfish, then shells) and the crane's 4
+/// slides last. Callers pass boxes plus crawfish: shells move by design
+/// (row 7.5).
+pub fn max_box_displacement(first: &[f64], last: &[f64], bodies: usize) -> f64 {
     let n = first.len().min(last.len());
-    let boxes = n.saturating_sub(4) / 7;
+    let boxes = (n.saturating_sub(4) / 7).min(bodies);
     (0..boxes)
         .flat_map(|b| (0..3).map(move |k| 7 * b + k))
         .map(|i| (last[i] - first[i]).abs())

@@ -5,7 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use bt::{BbSchema, Blackboard, GantrySnapshot, RELOAD_CHECK_TICKS, Status, Tree};
+use bt::{
+    BbEvent, BbSchema, Blackboard, EVENTS_KEPT, GantrySnapshot, RELOAD_CHECK_TICKS, Status, Tree,
+};
 use mast::route::Pose;
 use mlua::Lua;
 
@@ -278,4 +280,51 @@ fn a_leaf_can_ask_for_a_transfer() {
     let (mut bb, s) = board();
     assert_eq!(tree.tick(&mut bb), Status::Running);
     assert_eq!(bb.get(&s.gantry_goal), Some(&Some(Pose::Transfer(1, 2))));
+}
+
+#[test]
+fn a_leaf_reads_recent_events_and_cannot_write_them() {
+    // Row 7.5: events reach Lua through the read-only view.
+    let d = dir("events");
+    write(
+        &d,
+        "ev.lua",
+        r#"function tick(bb)
+             local n = #bb.events
+             if n == 0 then return "failure" end
+             local e = bb.events[n]
+             assert(e.kind == "Molted" and e.r == 1 and e.c == 2 and e.tray == 0 and e.t == 90.5)
+             return "success"
+           end"#,
+    );
+    write(
+        &d,
+        "w.lua",
+        r#"function tick(bb) bb.events = {} return "success" end"#,
+    );
+    let mut tree = load(&d, r#"return Leaf("ev.lua")"#);
+    let (mut bb, s) = board();
+    assert_eq!(tree.tick(&mut bb), Status::Failure, "no events yet");
+    let ev = |seq| BbEvent {
+        seq,
+        t: 90.5,
+        kind: "Molted",
+        tray: 0,
+        r: 1,
+        c: 2,
+    };
+    s.push_event(&mut bb, ev(1));
+    assert_eq!(tree.tick(&mut bb), Status::Success);
+    assert!(tree.take_errors().is_empty());
+
+    for seq in 2..=(EVENTS_KEPT as u64 + 5) {
+        s.push_event(&mut bb, ev(seq));
+    }
+    let q = bb.get(&s.events).unwrap();
+    assert_eq!(q.len(), EVENTS_KEPT);
+    assert_eq!(q.front().unwrap().seq, 6, "the oldest dropped off");
+
+    let mut w = load(&d, r#"return Leaf("w.lua")"#);
+    assert_eq!(w.tick(&mut bb), Status::Failure);
+    assert!(w.take_errors()[0].message.contains("read-only"));
 }

@@ -294,13 +294,22 @@ impl EventBus {
 }
 
 /// Every animal in the farm, one per cell, and the bus their events go to.
+///
+/// Row 7.5 adds two things per cell: the shed shell's timer (a `Molted`
+/// starts it, and `ShellEaten` fires `shell_delay` later) and its water
+/// ([`CellBio`], stepped with the animals).
 pub struct World {
     pub params: LifecycleParams,
+    /// Rates and bounds for every cell's [`CellBio`] (row 7.6).
+    pub bio_params: BioParams,
     /// One random stream per animal (row 7.2), so an animal's draws don't
     /// depend on when its neighbours transition. That keeps fast-forward
     /// and real-time stepping on the same history.
     rngs: Vec<ChaCha8Rng>,
     animals: Vec<(CellId, Crawfish)>,
+    /// Seconds until each cell's shed shell is eaten; `None` with no shell.
+    shells: Vec<Option<f64>>,
+    bio: Vec<CellBio>,
     pub bus: EventBus,
     steps: Tick,
 }
@@ -321,24 +330,57 @@ impl World {
             .zip(rngs.iter_mut())
             .map(|(&c, rng)| (c, Crawfish::new(&params, rng)))
             .collect();
+        let bio_params = BioParams::default();
         World {
             params,
+            bio_params,
             rngs,
+            shells: vec![None; cells.len()],
+            bio: vec![CellBio::new(&bio_params); cells.len()],
             animals,
             bus: EventBus::default(),
             steps: 0,
         }
     }
 
-    /// Advance every animal by `bio_dt` seconds, publish their events and
-    /// return them.
+    /// Advance every animal, shell timer and cell's water by `bio_dt`
+    /// seconds, publish the events and return them (in cell order, and per
+    /// cell in the order they happened).
     pub fn step(&mut self, bio_dt: f64) -> Vec<Event> {
         self.steps += 1;
+        let dt = if bio_dt.is_finite() {
+            bio_dt.max(0.0)
+        } else {
+            0.0
+        };
         let mut out = Vec::new();
-        for ((cell, animal), rng) in self.animals.iter_mut().zip(self.rngs.iter_mut()) {
-            if let Some(e) = animal.step(bio_dt, &self.params, rng) {
+        let cells = self.animals.iter_mut().zip(self.rngs.iter_mut());
+        for (((cell, animal), rng), (shell, bio)) in
+            cells.zip(self.shells.iter_mut().zip(self.bio.iter_mut()))
+        {
+            // An existing shell ages first: one this step's molt sheds
+            // starts its clock now.
+            if let Some(left) = shell {
+                *left -= dt;
+            }
+            if let Some(e) = animal.step(dt, &self.params, rng) {
+                if matches!(e, Event::Molted(_)) {
+                    // The molt happened part-way through the step: the time
+                    // since then is how far into Molting the animal is (or
+                    // all of it, if the step went on past Molting).
+                    let since = match animal.stage {
+                        MoltStage::Molting => animal.t_in_stage.min(dt),
+                        _ => 0.0,
+                    };
+                    *shell = Some(self.params.shell_delay - since);
+                }
                 out.push(e.at(*cell));
             }
+            if shell.is_some_and(|left| left <= 0.0) {
+                *shell = None;
+                out.push(Event::ShellEaten(*cell));
+            }
+            bio.step(dt, 1, &self.bio_params);
         }
         for e in &out {
             self.bus.publish(self.steps, *e);
@@ -351,13 +393,27 @@ impl World {
         &self.animals
     }
 
-    /// Seconds until the next stage change of any animal (row 7.2). The
-    /// fast-forward clock jumps exactly this far when nothing else is going on.
+    /// Each cell's water, in the same order as [`World::animals`].
+    pub fn bio(&self) -> &[CellBio] {
+        &self.bio
+    }
+
+    /// Whether the cell at index `i` (of [`World::animals`]) has an uneaten
+    /// shed shell.
+    pub fn has_shell(&self, i: usize) -> bool {
+        self.shells.get(i).is_some_and(Option::is_some)
+    }
+
+    /// Seconds until the next stage change of any animal or the next shell
+    /// eaten (rows 7.2 and 7.5). The fast-forward clock jumps exactly this
+    /// far when nothing else is going on.
     pub fn time_to_next_transition(&self) -> f64 {
-        self.animals
+        let stages = self
+            .animals
             .iter()
-            .map(|(_, a)| (a.next_transition - a.t_in_stage).max(0.0))
-            .fold(f64::INFINITY, f64::min)
+            .map(|(_, a)| (a.next_transition - a.t_in_stage).max(0.0));
+        let shells = self.shells.iter().flatten().map(|left| left.max(0.0));
+        stages.chain(shells).fold(f64::INFINITY, f64::min)
     }
 }
 
