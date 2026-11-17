@@ -65,6 +65,22 @@ pub struct BodyState {
     pub pos: [f64; 3],
     /// World orientation `xquat`, unit quaternion `[w, x, y, z]`.
     pub quat: [f64; 4],
+    /// Magnitude of the external contact force on the body, newtons: the
+    /// force part of `cfrc_ext`, which `Sim::step` keeps current (row 5.3).
+    pub contact_force: f64,
+    /// Rotation about world X, radians, from `quat` (Z-Y-X Euler angles).
+    pub roll: f64,
+    /// Rotation about world Y, radians, from `quat` (Z-Y-X Euler angles).
+    pub pitch: f64,
+}
+
+/// `(roll, pitch)` in radians from a unit quaternion `[w, x, y, z]`
+/// (Z-Y-X Euler angles). Pitch is clamped at ±90° so it never goes NaN.
+pub fn roll_pitch(q: [f64; 4]) -> (f64, f64) {
+    let [w, x, y, z] = q;
+    let roll = (2.0 * (w * x + y * z)).atan2(1.0 - 2.0 * (x * x + y * y));
+    let pitch = (2.0 * (w * y - z * x)).clamp(-1.0, 1.0).asin();
+    (roll, pitch)
 }
 
 /// A typed, owned copy of the sim state at one instant.
