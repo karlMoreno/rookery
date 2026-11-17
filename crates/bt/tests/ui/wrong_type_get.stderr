@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/wrong_type_get.rs:7:36
+  |
+7 |     let _: Option<&usize> = bb.get(&time);
+  |                                --- ^^^^^ expected `&BbKey<usize>`, found `&BbKey<f64>`
+  |                                |
+  |                                arguments to this method are incorrect
+  |
+  = note: expected reference `&BbKey<usize>`
+             found reference `&BbKey<f64>`
+note: method defined here
+ --> src/lib.rs
+  |
+  |     pub fn get<T: Any + Send>(&self, key: &BbKey<T>) -> Option<&T> {
+  |            ^^^
