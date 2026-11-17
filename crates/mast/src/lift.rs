@@ -48,6 +48,11 @@ impl MacroCommand {
     pub fn completed(&self) -> usize {
         self.done
     }
+
+    /// How many steps there are in total.
+    pub fn steps(&self) -> usize {
+        self.steps.len()
+    }
 }
 
 impl Command for MacroCommand {
