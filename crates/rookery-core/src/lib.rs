@@ -293,7 +293,10 @@ impl EventBus {
 /// Every animal in the farm, one per cell, and the bus their events go to.
 pub struct World {
     pub params: LifecycleParams,
-    rng: ChaCha8Rng,
+    /// One random stream per animal (row 7.2), so an animal's draws don't
+    /// depend on when its neighbours transition. That keeps fast-forward
+    /// and real-time stepping on the same history.
+    rngs: Vec<ChaCha8Rng>,
     animals: Vec<(CellId, Crawfish)>,
     pub bus: EventBus,
     steps: Tick,
@@ -303,14 +306,21 @@ impl World {
     /// One animal per cell, all drawn from `seed`, so the same seed gives
     /// the same history.
     pub fn new(params: LifecycleParams, seed: u64, cells: &[CellId]) -> Self {
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let mut rngs: Vec<ChaCha8Rng> = (0..cells.len())
+            .map(|i| {
+                let mut r = ChaCha8Rng::seed_from_u64(seed);
+                r.set_stream(i as u64);
+                r
+            })
+            .collect();
         let animals = cells
             .iter()
-            .map(|&c| (c, Crawfish::new(&params, &mut rng)))
+            .zip(rngs.iter_mut())
+            .map(|(&c, rng)| (c, Crawfish::new(&params, rng)))
             .collect();
         World {
             params,
-            rng,
+            rngs,
             animals,
             bus: EventBus::default(),
             steps: 0,
@@ -322,8 +332,8 @@ impl World {
     pub fn step(&mut self, bio_dt: f64) -> Vec<Event> {
         self.steps += 1;
         let mut out = Vec::new();
-        for (cell, animal) in &mut self.animals {
-            if let Some(e) = animal.step(bio_dt, &self.params, &mut self.rng) {
+        for ((cell, animal), rng) in self.animals.iter_mut().zip(self.rngs.iter_mut()) {
+            if let Some(e) = animal.step(bio_dt, &self.params, rng) {
                 out.push(e.at(*cell));
             }
         }
@@ -336,6 +346,15 @@ impl World {
     /// The animals and their cells.
     pub fn animals(&self) -> &[(CellId, Crawfish)] {
         &self.animals
+    }
+
+    /// Seconds until the next stage change of any animal (row 7.2). The
+    /// fast-forward clock jumps exactly this far when nothing else is going on.
+    pub fn time_to_next_transition(&self) -> f64 {
+        self.animals
+            .iter()
+            .map(|(_, a)| (a.next_transition - a.t_in_stage).max(0.0))
+            .fold(f64::INFINITY, f64::min)
     }
 }
 

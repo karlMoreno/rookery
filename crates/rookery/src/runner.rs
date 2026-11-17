@@ -87,6 +87,12 @@ impl<H: Hooks> Runner<H> {
         &self.sim
     }
 
+    /// Take the hooks out, dropping the sim.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn into_hooks(self) -> H {
+        self.hooks
+    }
+
     /// Write access to the hooks, e.g. to close a run.
     pub fn hooks_mut(&mut self) -> &mut H {
         &mut self.hooks

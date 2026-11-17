@@ -119,3 +119,39 @@ fn the_bus_logs_and_notifies_subscribers() {
     assert_eq!(*seen.borrow(), returned);
     assert_eq!(w.bus.log().len(), returned);
 }
+
+#[test]
+fn fast_forward_and_fine_steps_give_each_cell_the_same_history() {
+    // Row 7.2: jumping to the next transition (fast-forward) and stepping
+    // every minute must produce the same events per cell, because each
+    // animal draws from its own random stream.
+    let cells: Vec<CellId> = (0..16).map(cell).collect();
+    let horizon = 20.0 * DAY;
+    let per_cell = |events: Vec<Event>| {
+        let mut m: std::collections::BTreeMap<CellId, Vec<&'static str>> = Default::default();
+        for e in events {
+            let (c, k) = match e {
+                Event::Molted(c) => (c, "molted"),
+                Event::WindowClosing(c) => (c, "window"),
+                _ => continue,
+            };
+            m.entry(c).or_default().push(k);
+        }
+        m
+    };
+    let mut fine = World::new(LifecycleParams::default(), 5, &cells);
+    let mut fine_events = Vec::new();
+    for _ in 0..(horizon / 60.0) as usize {
+        fine_events.extend(fine.step(60.0));
+    }
+    let mut ff = World::new(LifecycleParams::default(), 5, &cells);
+    let (mut t, mut ff_events) = (0.0, Vec::new());
+    while t < horizon {
+        let dt = (ff.time_to_next_transition() + 1e-6).min(horizon - t);
+        ff_events.extend(ff.step(dt));
+        t += dt;
+    }
+    let (a, b) = (per_cell(fine_events), per_cell(ff_events));
+    assert!(!a.is_empty());
+    assert_eq!(a, b);
+}
