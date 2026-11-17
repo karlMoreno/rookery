@@ -164,7 +164,19 @@ pub struct MoveCommand {
     /// every step at `MAX_VEL`, so this can only slow a move down (row 5.5).
     #[serde(default = "full_speed")]
     pub speed: f64,
+    /// Current commanded speed along the axis, m/s, for the acceleration
+    /// ramp. Starts at 0. Not logged.
+    #[serde(skip)]
+    vel: f64,
 }
+
+/// Acceleration limit per axis (rail, mast, arm, hook), m/s². Every move
+/// ramps up and down at this rate instead of jumping to full speed: a box
+/// hanging from the saddle slides along its handle under abrupt starts and
+/// stops (row 6.6 probe), and undo after a release then misses its cell.
+/// Not a safety limit (clamp still caps every step at MAX_VEL), so it lives
+/// here and not in limits.rs.
+pub const MAX_ACCEL: [f64; 4] = [0.5, 0.5, 0.5, 0.1];
 
 fn full_speed() -> f64 {
     1.0
@@ -185,6 +197,7 @@ impl MoveCommand {
             settling: 0,
             blocked: 0,
             speed: 1.0,
+            vel: 0.0,
         }
     }
 
@@ -222,14 +235,26 @@ impl Command for MoveCommand {
         // passes the goal through untouched, so the target lands on it exactly.
         let prev = st.targets;
         let mut want = prev;
-        let step = self.speed * limits::MAX_VEL[i] * dt.max(0.0);
-        want.0[i] = if self.speed >= 1.0 || (self.goal - current).abs() <= step {
+        // Trapezoid profile: accelerate at MAX_ACCEL up to speed × MAX_VEL,
+        // and slow down so as to stop at the goal (v ≤ √(2·a·remaining)).
+        let dt_ = dt.max(0.0);
+        let remaining = (self.goal - current).abs();
+        let a = MAX_ACCEL[i];
+        let vmax = self.speed * limits::MAX_VEL[i];
+        self.vel = (self.vel + a * dt_)
+            .min(vmax)
+            .min((2.0 * a * remaining).sqrt());
+        let step = self.vel * dt_;
+        want.0[i] = if remaining <= step || remaining <= 1e-9 {
             self.goal
         } else {
             current + step.copysign(self.goal - current)
         };
         st.targets = clamp(&prev, want, dt, &st.windows);
 
+        if st.targets.0[i] == self.goal {
+            self.vel = 0.0; // arrived: the next move starts from rest
+        }
         if st.targets.0[i] != self.goal {
             if st.targets.0[i] == current && dt > 0.0 {
                 self.blocked += 1;
