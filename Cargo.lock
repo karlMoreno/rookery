@@ -712,8 +712,10 @@ dependencies = [
 name = "rookery"
 version = "0.1.0"
 dependencies = [
+ "bt",
  "clap",
  "mast",
+ "mlua",
  "ron",
  "serde",
  "serde_json",
