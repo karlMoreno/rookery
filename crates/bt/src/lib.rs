@@ -47,6 +47,8 @@
 //! write a leaf has is a goal pose (`bb:goto(pose)`). Rust expands it with
 //! `mast::route` and plays it through `mast::clamp`.
 
+pub mod nodes;
+
 use std::any::Any;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
