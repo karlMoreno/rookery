@@ -16,7 +16,7 @@ function check(log)
   if log.events == nil or log.shells == nil then
     return false, "the run log has no events or shells"
   end
-  local molts, eaten = 0, 0
+  local molts, eaten, windows = 0, 0, 0
   for _, e in ipairs(log.events) do
     local key = e.r .. "," .. e.c
     if e.kind == "Molted" then
@@ -27,6 +27,9 @@ function check(log)
       end
     elseif e.kind == "ShellEaten" then
       eaten = eaten + 1
+    elseif e.kind == "WindowClosing" then
+      -- Informational until Phase 8 harvests: every window closes unharvested.
+      windows = windows + 1
     end
   end
   if molts == 0 then
@@ -35,5 +38,7 @@ function check(log)
   if log.max_box_displacement > 0.002 then
     return false, string.format("a box or crawfish moved %.4f m", log.max_box_displacement)
   end
-  return true, string.format("%d molts in a week, every shell in its box (%d eaten since)", molts, eaten)
+  return true, string.format(
+    "%d molts in a week, every shell in its box (%d eaten since); %d soft-shell windows closed unharvested",
+    molts, eaten, windows)
 end
