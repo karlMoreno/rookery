@@ -59,6 +59,8 @@ pub struct SceneMeta {
     /// (width X, depth Y, height Z).
     pub box_size: [f64; 3],
     pub handle_height: f64,
+    /// Water depth above the tray floor (the water plane's height).
+    pub water_depth: f64,
     pub derived: Derived,
 }
 

@@ -252,6 +252,34 @@ impl Sim {
         Ok(())
     }
 
+    /// Overwrite the generalized positions `qpos` and recompute every derived
+    /// quantity (`mj_forward`), without stepping time. Gates use it to start
+    /// a trial from a chosen pose (row 5.4).
+    ///
+    /// # Errors
+    /// [`SimError::QposLen`] when `qpos.len() != nq`, and nothing changes.
+    pub fn set_qpos(&mut self, qpos: &[f64]) -> Result<(), SimError> {
+        // SAFETY: invariant 1, so `model` is non-null and valid.
+        let nq = usize::try_from(unsafe { (*self.model).nq }).unwrap_or(0);
+        if qpos.len() != nq {
+            return Err(SimError::QposLen {
+                expected: nq,
+                got: qpos.len(),
+            });
+        }
+        if nq > 0 {
+            // SAFETY: invariants 1 and 2. `qpos` is a non-null array of
+            // exactly `nq` mjtNums when nq > 0, the length was checked above,
+            // and `&mut self` is exclusive while the slice is alive.
+            let q = unsafe { std::slice::from_raw_parts_mut((*self.data).qpos, nq) };
+            q.copy_from_slice(qpos);
+        }
+        // SAFETY: invariants 1 and 2 (non-null, paired). `&mut self` is
+        // exclusive, and mj_forward only writes `data`.
+        unsafe { ffi::mj_forward(self.model, self.data) };
+        Ok(())
+    }
+
     /// Index of the body called `name` in [`Snapshot::bodies`] (equal to its
     /// MuJoCo body id), or `None` if the model has no such body.
     pub fn body_index(&self, name: &str) -> Option<usize> {
@@ -411,6 +439,25 @@ mod tests {
         }
         let t = sim.sensor("t").expect("touch sensor exists");
         assert!((t - 2.0 * 9.81).abs() < 1.0, "touch {t}");
+    }
+
+    #[test]
+    fn set_qpos_moves_the_body_without_stepping_time() {
+        let mut sim = Sim::load(DROP_XML).expect("drop.xml loads");
+        let b = sim.body_index("box").unwrap();
+        let mut q = sim.qpos();
+        q[2] = 0.3;
+        sim.set_qpos(&q).expect("same length");
+        let s = sim.snapshot();
+        assert_eq!(s.time, 0.0);
+        assert!((s.bodies[b].pos[2] - 0.3).abs() < 1e-12);
+        assert!(matches!(
+            sim.set_qpos(&[0.0]),
+            Err(SimError::QposLen {
+                expected: 7,
+                got: 1
+            })
+        ));
     }
 
     #[test]

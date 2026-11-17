@@ -54,6 +54,9 @@ pub enum SimError {
     /// A [`Targets`] vector whose length is not the model's `nu`.
     #[error("target length {got} does not match actuator count {expected}")]
     TargetLen { expected: usize, got: usize },
+    /// A qpos vector whose length is not the model's `nq`.
+    #[error("qpos length {got} does not match nq {expected}")]
+    QposLen { expected: usize, got: usize },
 }
 
 /// Pose of one MuJoCo body in world coordinates, copied out of `mjData`.

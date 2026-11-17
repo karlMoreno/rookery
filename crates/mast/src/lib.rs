@@ -30,12 +30,14 @@
 //! [`GantryObs`] from the sim snapshot, and CI checks `cargo tree -p mast`.
 
 pub mod kinematics;
+pub mod lift;
 pub mod limits;
 pub mod route;
 
 use serde::{Deserialize, Serialize};
 
 pub use kinematics::{SceneMeta, cell_pose, exit_pose, home};
+pub use lift::{LIFT_HEIGHT, LiftSequence, MacroCommand};
 pub use limits::ShelfWindows;
 
 /// The crane's four prismatic joints, in the order used by every `[f64; 4]`.
