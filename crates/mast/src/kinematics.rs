@@ -43,6 +43,9 @@ pub const HOOK_RADIUS: f64 = 0.004;
 /// How far the hook's tip turns up above the finger's centreline, metres.
 /// Matches the `hook_tip` geom in the builder.
 pub const HOOK_TIP_RISE: f64 = 0.015;
+/// Width of the hook's flat saddle across the handle, metres. Matches
+/// `SceneSpec.hook_width` (row 5.5).
+pub const HOOK_WIDTH: f64 = 0.03;
 /// The hook's vertical envelope, from the finger's underside to the top of
 /// the tip: 23 mm. It must fit the gap between a box's top and its handle.
 pub const HOOK_ENVELOPE: f64 = 2.0 * HOOK_RADIUS + HOOK_TIP_RISE;

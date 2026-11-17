@@ -76,7 +76,10 @@ GANTRY_RANGES = {
 GANTRY_HOME = {"rail_y": 0.0, "mast_z": 0.45, "arm_x": 0.0, "hook_lift": 0.0}
 #: Position-actuator gains. With dampratio=1 each axis is critically damped,
 #: so a 0.3 m step settles in under 1 s with no overshoot (test_gantry.py).
-GANTRY_KP = {"rail_y": 600.0, "mast_z": 300.0, "arm_x": 200.0, "hook_lift": 100.0}
+#: mast_z and hook_lift carry the box when lifting, so they are stiff
+#: (row 5.5): at kp 300/100 a 0.15 kg box sagged them past DONE_TOL and the
+#: mast move timed out, and at 2000 the sag is under 1 mm.
+GANTRY_KP = {"rail_y": 600.0, "mast_z": 2000.0, "arm_x": 200.0, "hook_lift": 2000.0}
 #: Moving masses, kg: truck, lift carriage, arm, hook.
 GANTRY_MASS = {"rail_y": 5.0, "mast_z": 1.0, "arm_x": 0.5, "hook_lift": 0.1}
 CRANE_RGBA = (0.85, 0.75, 0.2, 1.0)
@@ -442,11 +445,21 @@ class MjcfBuilder:
         hr = ("rgba", num(*HOOK_RGBA))
         # J-hook: a finger along +X at hook height with an upturned tip, so it
         # slides under a handle (a capsule along Y) and catches it when lifted.
-        hr_, hf = s.hook_radius, s.hook_finger
-        self._el(hook, "geom", [("name", "hook"), ("type", "capsule"), ("size", num(hr_)),
-                                ("fromto", num(0, 0, 0, hf, 0, 0)), hr, *self._contact()])
-        self._el(hook, "geom", [("name", "hook_tip"), ("type", "capsule"), ("size", num(hr_)),
-                                ("fromto", num(hf, 0, 0, hf, 0, s.hook_tip_rise)), hr, *self._contact()])
+        hr_, hf, hw = s.hook_radius, s.hook_finger, s.hook_width
+        if hw > 0:
+            # Flat saddle (row 5.5): a plate finger and a plate tip, hook_width
+            # wide across the handle, 2 × hook_radius thick. Same envelope.
+            self._el(hook, "geom", [("name", "hook"), ("type", "box"),
+                                    ("size", num(hf / 2, hw / 2, hr_)), ("pos", num(hf / 2, 0, 0)),
+                                    hr, *self._contact()])
+            self._el(hook, "geom", [("name", "hook_tip"), ("type", "box"),
+                                    ("size", num(hr_, hw / 2, s.hook_tip_rise / 2)),
+                                    ("pos", num(hf, 0, s.hook_tip_rise / 2)), hr, *self._contact()])
+        else:
+            self._el(hook, "geom", [("name", "hook"), ("type", "capsule"), ("size", num(hr_)),
+                                    ("fromto", num(0, 0, 0, hf, 0, 0)), hr, *self._contact()])
+            self._el(hook, "geom", [("name", "hook_tip"), ("type", "capsule"), ("size", num(hr_)),
+                                    ("fromto", num(hf, 0, 0, hf, 0, s.hook_tip_rise)), hr, *self._contact()])
         self._el(hook, "geom", [("name", "hook_stem"), ("type", "capsule"), ("size", num(hr_)),
                                 ("fromto", num(0, 0, 0, 0, 0, 0.02)), *free, hr])
 

@@ -128,6 +128,11 @@ class SceneSpec:
     hook_finger: float = 0.04
     hook_radius: float = 0.004
     hook_tip_rise: float = 0.015
+    #: Width of the hook across the handle (Y). 0 keeps the round capsule
+    #: finger of Phases 3-4. A flat 30 mm saddle stops a hanging box rolling
+    #: about the single contact point: in the 5.5 probe a capsule let ±5 mm
+    #: offsets swing the box 14-22°, and the saddle held it under 1°.
+    hook_width: float = 0.03
     #: The crawfish in each box (row 5.2): a capsule lying along X on the
     #: box floor. Length is the capsule's full length, tips included.
     crawfish: bool = True
@@ -293,6 +298,10 @@ class SceneSpec:
                     p.append("crawfish_length must be at least twice crawfish_radius")
                 if 2 * self.crawfish_radius >= self.box_size[2]:
                     p.append("the crawfish is taller than the box walls")
+            if self.preset is None and self.hook_width < 0:
+                p.append(f"hook_width must be ≥ 0, got {self.hook_width}")
+            if self.preset is None and self.hook_width >= self.box_size[1] - 0.04:
+                p.append(f"hook_width {self.hook_width:.3f} must fit between the handle posts")
             if self.preset is None and self.hook_finger >= min(self.box_size[0], self.box_size[1]) / 2:
                 p.append(f"hook_finger {self.hook_finger:.3f} must be shorter than half the box")
             # Aisle side, from -X inwards: floor rail | exit tray | tray.
