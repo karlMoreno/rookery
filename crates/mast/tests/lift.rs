@@ -83,12 +83,26 @@ fn the_engage_segment_is_slower_than_max_vel() {
         q: st.targets.0,
         ee_contact: 0.0,
     };
-    lift.tick(&mut st, &obs, DT);
-    let step = st.targets.0[Axis::HookLift.index()] - start.0[Axis::HookLift.index()];
+    let _ = obs;
+    // With the acceleration ramp (6.6) the first steps are smaller; the
+    // cruise step during the engage segment is ENGAGE_SPEED × MAX_VEL × dt.
     let limit = MAX_VEL[Axis::HookLift.index()] * DT;
+    let mut biggest: f64 = 0.0;
+    for _ in 0..200 {
+        let before = st.targets.0[Axis::HookLift.index()];
+        let obs = GantryObs {
+            q: st.targets.0,
+            ee_contact: 0.0,
+        };
+        lift.tick(&mut st, &obs, DT);
+        biggest = biggest.max(st.targets.0[Axis::HookLift.index()] - before);
+        if lift.completed() >= 1 {
+            break;
+        }
+    }
     assert!(
-        (step - ENGAGE_SPEED * limit).abs() < 1e-12,
-        "step {step}, limit {limit}"
+        (biggest - ENGAGE_SPEED * limit).abs() < 1e-12,
+        "cruise step {biggest}, limit {limit}"
     );
 }
 

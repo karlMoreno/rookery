@@ -149,7 +149,8 @@ fn move_then_undo_returns_the_exact_prior_targets() {
     assert_eq!(status, CmdStatus::Done);
     assert_eq!(st.targets.0[Axis::ArmX.index()], 0.6);
     // 0.6 m at 0.20 m/s and 50 Hz takes 150 ticks, plus one to confirm.
-    assert!((150..=152).contains(&ticks), "{ticks} ticks");
+    // 150 ticks at cruise speed, plus the acceleration ramps (row 6.6).
+    assert!((150..=180).contains(&ticks), "{ticks} ticks");
     assert_eq!(mv.start(), Some(0.0));
 
     let mut back = mv.undo();
