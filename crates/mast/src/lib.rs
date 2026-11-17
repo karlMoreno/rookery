@@ -157,6 +157,15 @@ pub struct MoveCommand {
     /// Ticks in a row on which `clamp` let the target make no progress. Not logged.
     #[serde(skip)]
     blocked: u32,
+    /// Fraction of the axis's `MAX_VEL` to move at, in (0, 1]. 1 by default.
+    /// A slow segment (the lift's engage) asks for less; `clamp` still caps
+    /// every step at `MAX_VEL`, so this can only slow a move down (row 5.5).
+    #[serde(default = "full_speed")]
+    pub speed: f64,
+}
+
+fn full_speed() -> f64 {
+    1.0
 }
 
 /// How long a [`MoveCommand`] waits for the measured position to settle
@@ -173,7 +182,18 @@ impl MoveCommand {
             start: None,
             settling: 0,
             blocked: 0,
+            speed: 1.0,
         }
+    }
+
+    /// The same move at `speed` × `MAX_VEL` (clamped to (0, 1]).
+    pub fn with_speed(mut self, speed: f64) -> Self {
+        self.speed = if speed.is_finite() {
+            speed.clamp(0.01, 1.0)
+        } else {
+            1.0
+        };
+        self
     }
 
     /// Where the axis was when the first tick ran, once it has run.
@@ -200,7 +220,12 @@ impl Command for MoveCommand {
         // passes the goal through untouched, so the target lands on it exactly.
         let prev = st.targets;
         let mut want = prev;
-        want.0[i] = self.goal;
+        let step = self.speed * limits::MAX_VEL[i] * dt.max(0.0);
+        want.0[i] = if self.speed >= 1.0 || (self.goal - current).abs() <= step {
+            self.goal
+        } else {
+            current + step.copysign(self.goal - current)
+        };
         st.targets = clamp(&prev, want, dt, &st.windows);
 
         if st.targets.0[i] != self.goal {
@@ -231,7 +256,7 @@ impl Command for MoveCommand {
     /// nothing to reverse, so the undo is a command that is done at once.
     fn undo(&self) -> Box<dyn Command> {
         match self.start {
-            Some(start) => Box::new(MoveCommand::new(self.axis, start)),
+            Some(start) => Box::new(MoveCommand::new(self.axis, start).with_speed(self.speed)),
             None => Box::new(Noop),
         }
     }
