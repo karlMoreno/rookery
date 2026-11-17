@@ -17,6 +17,8 @@ Replaying a run logged by ``rookery run`` (row 3.5):
     uv run python -m scene.render --run tour-1763262000 --frame -1 --out last.png   # headless
     uv run mjpython -m scene.render --run tour-1763262000 --live                     # passive viewer
 
+    uv run python -m scene.render --run tree-1763262000 --out transfer.mp4         # video (6.7)
+
 ``--run`` reads ``<runs>/<id>/summary.json`` (for the scene) and ``qpos.csv``
 (one row per 50 Hz tick). ``--frame`` then indexes the ticks (``-1`` is the
 last one). ``--live`` plays them in the MuJoCo passive viewer at real time,
@@ -104,6 +106,38 @@ def render_qpos(model: mujoco.MjModel, qpos: list[float], width: int = 640, heig
         return r.render()
 
 
+def write_video(out: Path, model: mujoco.MjModel, times: list[float], rows: list[list[float]],
+                fps: float, width: int, height: int, start: float = 0.0, end: float | None = None) -> int:
+    """Render the logged ticks to an .mp4 (H.264 via imageio-ffmpeg) or a
+    looping .gif, offscreen, sampling the 50 Hz log at `fps`. Returns the
+    frame count. The log's own time stamps set the pacing, so the video
+    plays at real time."""
+    import imageio.v3 as iio
+
+    t0 = times[0] + start
+    t1 = times[-1] if end is None else min(times[-1], times[0] + end)
+    picks, next_t, i = [], t0, 0
+    while next_t <= t1 + 1e-9 and i < len(times):
+        while i + 1 < len(times) and times[i + 1] <= next_t:
+            i += 1
+        picks.append(i)
+        next_t += 1.0 / fps
+    data = mujoco.MjData(model)
+    cam = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "overview")
+    frames = []
+    with mujoco.Renderer(model, height=height, width=width) as r:
+        for k in picks:
+            data.qpos[:] = rows[k]
+            mujoco.mj_forward(model, data)
+            r.update_scene(data, camera=cam if cam >= 0 else -1)
+            frames.append(r.render().copy())
+    if out.suffix.lower() == ".gif":
+        iio.imwrite(out, frames, duration=1000.0 / fps, loop=0)
+    else:
+        iio.imwrite(out, frames, fps=fps, codec="libx264", macro_block_size=8)
+    return len(frames)
+
+
 def replay_live(model: mujoco.MjModel, times: list[float], rows: list[list[float]]) -> None:
     """Play the logged ticks in the passive viewer at real time (opens a window)."""
     import time
@@ -130,6 +164,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--run", help="replay a run id logged by `rookery run`")
     ap.add_argument("--runs", type=Path, default=Path("runs"), help="run log directory (default runs/)")
     ap.add_argument("--live", action="store_true", help="with --run: play it in the passive viewer")
+    ap.add_argument("--fps", type=float, default=25.0, help="with --run and a .mp4/.gif --out: frames per second")
+    ap.add_argument("--size", default="640x480", help="with --run and a video --out: WxH (default 640x480)")
+    ap.add_argument("--start", type=float, default=0.0, help="with a video --out: first second to include")
+    ap.add_argument("--end", type=float, default=None, help="with a video --out: last second to include")
     args = ap.parse_args(argv)
 
     if args.run is not None:
@@ -140,6 +178,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.out is None:
             ap.error("--run needs --out (or --live)")
         out = args.out.resolve()
+        if out.suffix.lower() in (".mp4", ".gif"):
+            w, h = (int(v) for v in args.size.lower().split("x"))
+            n = write_video(out, model, times, rows, args.fps, w, h, args.start, args.end)
+            print(f"render: wrote {out} ({n} frames at {args.fps:g} fps, run {args.run})")
+            return 0
         write_png(out, render_qpos(model, rows[args.frame]))
         print(f"render: wrote {out} (run {args.run}, tick {args.frame % len(rows)} of {len(rows)})")
         return 0

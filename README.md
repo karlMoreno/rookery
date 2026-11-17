@@ -30,3 +30,15 @@ Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook han
 ```bash
 cargo run -p rookery -- scene/generated/rookery.xml
 ```
+
+Phase 6 demo. This moves box (1, 2) to the exit tray as one undoable transfer, then idles at home:
+
+![transfer](docs/transfer.gif)
+
+```bash
+cargo run --release -p rookery -- run --tree lua/trees/transfer.lua --seconds 40 --log runs/ --id demo
+```
+
+```bash
+(cd scene && uv run python -m scene.render --run demo --out transfer.mp4)
+```
