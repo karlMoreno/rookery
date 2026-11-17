@@ -21,7 +21,7 @@ Phase 1 demo. This drops a 0.1 m box onto a plane, and the last line is the box'
 cargo run -p rookery -- scene/generated/drop.xml
 ```
 
-Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray, the crane rails and, since Phase 3, the crane), then loads it (`nbody 38`: world, tray_0, 16 boxes, 16 crawfish and the four crane bodies):
+Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray, the crane rails and, since Phase 3, the crane), then loads it (`nbody 54`: world, tray_0, 16 boxes, 16 crawfish, 16 shed shells parked under the tray, and the four crane bodies):
 
 ```bash
 (cd scene && uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08)
@@ -31,9 +31,23 @@ Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook han
 cargo run -p rookery -- scene/generated/rookery.xml
 ```
 
-Phase 6 demo. This moves box (1, 2) to the exit tray as one undoable transfer, then idles at home:
+## What it can do
 
-![transfer](docs/transfer.gif)
+Every clip is a real run, replayed offscreen from its `qpos.csv` log (`scripts/demo_gifs.py`).
+
+| | |
+|---|---|
+| ![patrol](docs/patrol.gif) | **Patrol** (Phase 4). A Lua behavior tree sends the crane to every cell in turn; Rust plans and clamps each move. Shown at 4x. |
+| ![lift](docs/lift.gif) | **Lift** (Phase 5). The J-hook slides under box (1, 2)'s handle and lifts it with its crawfish inside, under 1° of roll. |
+| ![transfer](docs/transfer.gif) | **Transfer** (Phase 6). Box (1, 2) goes to the exit tray as one undoable command, and no other box moves. Shown at 2x. |
+| ![fault and undo](docs/fault_undo.gif) | **Fault and undo** (Phase 6). A fault injected 14 s in replaces the transfer with its undo, so the box goes back where it came from. Shown at 2x. |
+| ![molt](docs/molt.gif) | **Molt** (Phase 7). Biology fast-forwards between events; when a crawfish molts, its shed shell lands in its box, and a day later it is eaten. |
+
+![molt intervals over a sim-year](docs/molt_hist.png)
+
+A sim-year of 16 animals takes about 7 s: 199 molts, with molt-to-molt intervals matching the configured distribution (mean 29.15 days against 29.29).
+
+Phase 6 demo. This moves box (1, 2) to the exit tray as one undoable transfer, then idles at home:
 
 ```bash
 cargo run --release -p rookery -- run --tree lua/trees/transfer.lua --seconds 40 --log runs/ --id demo
@@ -41,4 +55,18 @@ cargo run --release -p rookery -- run --tree lua/trees/transfer.lua --seconds 40
 
 ```bash
 (cd scene && uv run python -m scene.render --run demo --out transfer.mp4)
+```
+
+Phase 7 demo. One sim-week of molts, then the molt-interval plot from a sim-year:
+
+```bash
+cargo run --release -p rookery -- run --scenario lua/scenarios/week.lua --log runs/ --id week
+```
+
+```bash
+cargo run --release -p rookery -- run --tree lua/trees/idle.lua --seconds 31536000 --log runs/ --id year
+```
+
+```bash
+(cd scene && uv run python -m scene.plots molt_hist ../runs/year)
 ```
