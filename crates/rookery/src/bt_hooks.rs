@@ -47,6 +47,9 @@ pub struct BtHooks<W: Write> {
     /// every measured joint within DONE_TOL of its target. One entry per goal.
     pub arrivals: Vec<Pose>,
     arrived: bool,
+    /// Fault injection (row 6.4): on this command tick, the active command is
+    /// replaced by its undo.
+    pub fault_at: Option<u64>,
 }
 
 impl<W: Write> BtHooks<W> {
@@ -74,6 +77,7 @@ impl<W: Write> BtHooks<W> {
             errors: Vec::new(),
             arrivals: Vec::new(),
             arrived: false,
+            fault_at: None,
         })
     }
 
@@ -85,6 +89,13 @@ impl<W: Write> BtHooks<W> {
     /// The crane player (for the command log and qpos errors).
     pub fn crane(&self) -> &Crane<W> {
         &self.crane
+    }
+
+    /// The crane player, mutably (to enqueue commands directly).
+    // Used by the tests now, and by Pose::Transfer goals in row 6.5.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn crane_mut(&mut self) -> &mut Crane<W> {
+        &mut self.crane
     }
 
     /// The goal the tree last set.
@@ -131,6 +142,12 @@ impl<W: Write> Hooks for BtHooks<W> {
             }
         }
 
+        if self.fault_at == Some(self.crane.ticks() + 1) && self.crane.abort_active() {
+            self.errors.push(format!(
+                "fault: injected at tick {}",
+                self.crane.ticks() + 1
+            ));
+        }
         if let Step::Failed(reason) = self.crane.tick(sim) {
             self.errors.push(format!("move: {reason}"));
         }

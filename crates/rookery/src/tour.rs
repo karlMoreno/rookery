@@ -36,6 +36,9 @@ pub enum Outcome {
 pub struct ScriptHooks<W: Write> {
     crane: Crane<W>,
     pub outcome: Option<Outcome>,
+    /// Fault injection (row 6.4): on this command tick, the active command is
+    /// replaced by its undo and the rest of the script is dropped.
+    pub fault_at: Option<u64>,
 }
 
 impl<W: Write> ScriptHooks<W> {
@@ -53,6 +56,7 @@ impl<W: Write> ScriptHooks<W> {
         Ok(Self {
             crane,
             outcome: None,
+            fault_at: None,
         })
     }
 
@@ -92,6 +96,9 @@ impl<W: Write> Hooks for ScriptHooks<W> {
     }
 
     fn tick(&mut self, sim: &mut Sim) {
+        if self.fault_at == Some(self.crane.ticks() + 1) {
+            self.crane.abort_active();
+        }
         let step = self.crane.tick(sim);
         if self.outcome.is_some() {
             return;
