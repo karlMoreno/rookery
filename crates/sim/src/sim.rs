@@ -137,9 +137,45 @@ impl Sim {
     /// Advance the physics by one `timestep` (`mj_step`).
     pub fn step(&mut self) {
         // SAFETY: invariants 1 and 2. `model` and `data` are non-null and
-        // paired. `&mut self` gives exclusive access to `data`, which
-        // `mj_step` mutates.
-        unsafe { ffi::mj_step(self.model, self.data) };
+        // paired. `&mut self` gives exclusive access to `data`, which both
+        // calls mutate. `mj_rnePostConstraint` fills `cfrc_ext` (the external
+        // contact forces) from the state `mj_step` just computed. MuJoCo
+        // skips it by default, and the snapshot's `contact_force` needs it
+        // (row 5.3).
+        unsafe {
+            ffi::mj_step(self.model, self.data);
+            ffi::mj_rnePostConstraint(self.model, self.data);
+        }
+    }
+
+    /// The first value of the sensor called `name` (`sensordata` at its
+    /// `sensor_adr`), or `None` if the model has no such sensor.
+    pub fn sensor(&self, name: &str) -> Option<f64> {
+        let c_name = CString::new(name).ok()?;
+        // SAFETY: invariant 1, so `model` is non-null. `c_name` is
+        // NUL-terminated and outlives the call. `mjOBJ_SENSOR` is a valid
+        // object type. The result is -1 or a valid sensor id.
+        let id = unsafe {
+            ffi::mj_name2id(
+                self.model,
+                ffi::mjtObj_mjOBJ_SENSOR as c_int,
+                c_name.as_ptr(),
+            )
+        };
+        let id = usize::try_from(id).ok()?;
+        // SAFETY: invariants 1 and 2. `id < nsensor` (mj_name2id returned it),
+        // so `sensor_adr[id]` is in bounds. Its value indexes `sensordata`,
+        // which holds `nsensordata` values, and every sensor's address is
+        // below that by MuJoCo's construction. Both are read once and copied.
+        unsafe {
+            let m = &*self.model;
+            let adr = usize::try_from(*m.sensor_adr.add(id)).ok()?;
+            let n = usize::try_from(m.nsensordata).ok()?;
+            if adr >= n {
+                return None;
+            }
+            Some(*(*self.data).sensordata.add(adr))
+        }
     }
 
     /// Copy `time`, `xpos` and `xquat` for every body into a [`Snapshot`].
@@ -151,12 +187,15 @@ impl Sim {
         // `body_names.len() == nbody`, set at load. `&self` means no `step`
         // runs while these borrowed slices are alive, and they are copied out
         // before this function returns.
-        let (time, xpos, xquat) = unsafe {
+        // `cfrc_ext` holds `nbody * 6` values (torque, then force) by the same
+        // invariant 2.
+        let (time, xpos, xquat, cfrc) = unsafe {
             let d = &*self.data;
             (
                 d.time,
                 std::slice::from_raw_parts(d.xpos, nbody * 3),
                 std::slice::from_raw_parts(d.xquat, nbody * 4),
+                std::slice::from_raw_parts(d.cfrc_ext, nbody * 6),
             )
         };
 
@@ -164,15 +203,23 @@ impl Sim {
             .body_names
             .iter()
             .enumerate()
-            .map(|(i, name)| BodyState {
-                name: name.clone(),
-                pos: [xpos[3 * i], xpos[3 * i + 1], xpos[3 * i + 2]],
-                quat: [
+            .map(|(i, name)| {
+                let quat = [
                     xquat[4 * i],
                     xquat[4 * i + 1],
                     xquat[4 * i + 2],
                     xquat[4 * i + 3],
-                ],
+                ];
+                let f = &cfrc[6 * i + 3..6 * i + 6];
+                let (roll, pitch) = crate::roll_pitch(quat);
+                BodyState {
+                    name: name.clone(),
+                    pos: [xpos[3 * i], xpos[3 * i + 1], xpos[3 * i + 2]],
+                    quat,
+                    contact_force: (f[0] * f[0] + f[1] * f[1] + f[2] * f[2]).sqrt(),
+                    roll,
+                    pitch,
+                }
             })
             .collect();
 
@@ -294,6 +341,82 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../scene/generated/drop.xml"
     );
+
+    /// Write `xml` to a temp file and load it.
+    fn load_str(name: &str, xml: &str) -> Sim {
+        let p = std::env::temp_dir().join(format!("sim-test-{name}-{}.xml", std::process::id()));
+        std::fs::write(&p, xml).expect("write temp scene");
+        Sim::load(&p).expect("temp scene loads")
+    }
+
+    #[test]
+    fn a_settled_box_reports_its_weight_as_contact() {
+        let mut sim = Sim::load(DROP_XML).expect("drop.xml loads");
+        let b = sim.body_index("box").unwrap();
+        assert_eq!(
+            sim.snapshot().bodies[b].contact_force,
+            0.0,
+            "in the air before any step"
+        );
+        for _ in 0..2_000 {
+            sim.step();
+        }
+        let f = sim.snapshot().bodies[b].contact_force;
+        assert!(
+            (f - 9.81).abs() < 0.5,
+            "1 kg at rest should feel ~9.81 N, got {f}"
+        );
+    }
+
+    #[test]
+    fn a_tilted_body_reports_roll_and_pitch_within_a_tenth_of_a_degree() {
+        let mut sim = load_str(
+            "tilt",
+            r#"<mujoco><worldbody>
+                 <body name="r" euler="10 0 0"><geom type="box" size=".1 .1 .1"/></body>
+                 <body name="p" euler="0 10 0" pos="1 0 0"><geom type="box" size=".1 .1 .1"/></body>
+               </worldbody></mujoco>"#,
+        );
+        // xquat is filled by the first step's forward pass; these bodies are
+        // welded to the world, so a step does not move them.
+        sim.step();
+        let s = sim.snapshot();
+        let deg = |x: f64| x.to_degrees();
+        let r = &s.bodies[sim.body_index("r").unwrap()];
+        let p = &s.bodies[sim.body_index("p").unwrap()];
+        assert!(
+            (deg(r.roll) - 10.0).abs() < 0.1 && deg(r.pitch).abs() < 0.1,
+            "{r:?}"
+        );
+        assert!(
+            (deg(p.pitch) - 10.0).abs() < 0.1 && deg(p.roll).abs() < 0.1,
+            "{p:?}"
+        );
+    }
+
+    #[test]
+    fn sensor_reads_by_name_and_unknown_is_none() {
+        let mut sim = load_str(
+            "touch",
+            r#"<mujoco><option timestep="0.001"/><worldbody>
+                 <geom type="plane" size="1 1 .1"/>
+                 <body name="b" pos="0 0 .1"><freejoint/>
+                   <geom type="box" size=".05 .05 .05" mass="2"/>
+                   <site name="s" type="box" size=".06 .06 .06"/></body>
+               </worldbody><sensor><touch name="t" site="s"/></sensor></mujoco>"#,
+        );
+        assert_eq!(sim.sensor("nope"), None);
+        for _ in 0..1_000 {
+            sim.step();
+        }
+        let t = sim.sensor("t").expect("touch sensor exists");
+        assert!((t - 2.0 * 9.81).abs() < 1.0, "touch {t}");
+    }
+
+    #[test]
+    fn roll_pitch_of_identity_is_zero() {
+        assert_eq!(crate::roll_pitch([1.0, 0.0, 0.0, 0.0]), (0.0, 0.0));
+    }
 
     #[test]
     fn bad_path_is_an_error() {
