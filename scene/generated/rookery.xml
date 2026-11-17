@@ -272,67 +272,67 @@
       <site name="crawfish_3_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
     </body>
     <geom name="shell_park" type="box" size="0.300000 0.300000 0.005000" pos="0.000000 0.000000 -0.305000" contype="0" conaffinity="2" group="3" rgba="0.550000 0.550000 0.580000 1.000000" />
-    <body name="shell_0_0" pos="-0.225000 -0.225000 -0.292000">
+    <body name="shell_0_0" pos="-0.225000 -0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_0_0_free" />
       <geom name="shell_0_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_0_1" pos="-0.225000 -0.075000 -0.292000">
+    <body name="shell_0_1" pos="-0.225000 -0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_0_1_free" />
       <geom name="shell_0_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_0_2" pos="-0.225000 0.075000 -0.292000">
+    <body name="shell_0_2" pos="-0.225000 0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_0_2_free" />
       <geom name="shell_0_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_0_3" pos="-0.225000 0.225000 -0.292000">
+    <body name="shell_0_3" pos="-0.225000 0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_0_3_free" />
       <geom name="shell_0_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_1_0" pos="-0.075000 -0.225000 -0.292000">
+    <body name="shell_1_0" pos="-0.075000 -0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_1_0_free" />
       <geom name="shell_1_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_1_1" pos="-0.075000 -0.075000 -0.292000">
+    <body name="shell_1_1" pos="-0.075000 -0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_1_1_free" />
       <geom name="shell_1_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_1_2" pos="-0.075000 0.075000 -0.292000">
+    <body name="shell_1_2" pos="-0.075000 0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_1_2_free" />
       <geom name="shell_1_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_1_3" pos="-0.075000 0.225000 -0.292000">
+    <body name="shell_1_3" pos="-0.075000 0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_1_3_free" />
       <geom name="shell_1_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_2_0" pos="0.075000 -0.225000 -0.292000">
+    <body name="shell_2_0" pos="0.075000 -0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_2_0_free" />
       <geom name="shell_2_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_2_1" pos="0.075000 -0.075000 -0.292000">
+    <body name="shell_2_1" pos="0.075000 -0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_2_1_free" />
       <geom name="shell_2_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_2_2" pos="0.075000 0.075000 -0.292000">
+    <body name="shell_2_2" pos="0.075000 0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_2_2_free" />
       <geom name="shell_2_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_2_3" pos="0.075000 0.225000 -0.292000">
+    <body name="shell_2_3" pos="0.075000 0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_2_3_free" />
       <geom name="shell_2_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_3_0" pos="0.225000 -0.225000 -0.292000">
+    <body name="shell_3_0" pos="0.225000 -0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_3_0_free" />
       <geom name="shell_3_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_3_1" pos="0.225000 -0.075000 -0.292000">
+    <body name="shell_3_1" pos="0.225000 -0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_3_1_free" />
       <geom name="shell_3_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_3_2" pos="0.225000 0.075000 -0.292000">
+    <body name="shell_3_2" pos="0.225000 0.075000 -0.290000" gravcomp="1">
       <freejoint name="shell_3_2_free" />
       <geom name="shell_3_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <body name="shell_3_3" pos="0.225000 0.225000 -0.292000">
+    <body name="shell_3_3" pos="0.225000 0.225000 -0.290000" gravcomp="1">
       <freejoint name="shell_3_3_free" />
       <geom name="shell_3_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
