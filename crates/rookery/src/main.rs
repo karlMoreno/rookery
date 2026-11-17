@@ -20,6 +20,7 @@
 
 mod bt_hooks;
 mod crane;
+mod lift_trials;
 mod runner;
 mod scenario;
 mod script;
@@ -57,12 +58,34 @@ enum Cmd {
     /// Play a tour script (--script) or a behavior tree (--tree) on the crane,
     /// logging every tick (Phase 3 and Phase 4 demos).
     Run(tour_cmd::RunArgs),
+    /// Run N offset lifts on cell (1, 1) and print their margins as JSON
+    /// (row 5.6; used by scene/scene/sweep.py).
+    Lift {
+        /// Scene to load. Its metadata is the .json beside it.
+        #[arg(long, default_value = "scene/generated/rookery.xml")]
+        scene: PathBuf,
+        /// Number of trials (seeds 0..N, the same seeds as the Phase 5 gate)
+        #[arg(long, default_value_t = 20)]
+        seeds: u64,
+        /// Mast speed during the lift, as a fraction of MAX_VEL
+        #[arg(long, default_value_t = mast::lift::LIFT_SPEED)]
+        lift_speed: f64,
+    },
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match (&cli.cmd, &cli.scene) {
         (Some(Cmd::Run(args)), _) => tour_cmd::run(args),
+        (
+            Some(Cmd::Lift {
+                scene,
+                seeds,
+                lift_speed,
+            }),
+            _,
+        ) => lift_trials::summary(scene, *seeds, *lift_speed)
+            .map(|v| serde_json::to_string(&v).unwrap_or_default() + "\n"),
         (None, Some(scene)) => run(scene).map(|r| r.to_string()),
         (None, None) => Err("give a scene to load, or `rookery run --script <tour.ron>`".into()),
     };
@@ -267,6 +290,15 @@ mod tests {
         let goal = mast::cell_pose(1, 2, &meta).unwrap();
         assert_eq!(h.targets(), goal, "targets reach the engage pose exactly");
         assert_eq!(h.crane().route_len(), 0);
+    }
+
+    #[test]
+    fn a_lift_trial_on_the_committed_scene_passes_with_margin() {
+        let scene = cli("scene/generated/rookery.xml");
+        let meta = mast::SceneMeta::load(scene.with_extension("json")).unwrap();
+        let t = lift_trials::trial(&scene, &meta, 0, mast::lift::LIFT_SPEED);
+        assert!(t.passed(), "{t:?}");
+        assert!(t.max_roll_deg < 2.0 && t.clearance_m > 0.02, "{t:?}");
     }
 
     #[test]
