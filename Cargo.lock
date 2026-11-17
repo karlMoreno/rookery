@@ -792,6 +792,7 @@ dependencies = [
  "mast",
  "mlua",
  "ron",
+ "rookery-core",
  "serde",
  "serde_json",
  "sim",

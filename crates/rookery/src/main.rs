@@ -191,6 +191,7 @@ mod tests {
             scenario: None,
             ticks: None,
             fault_at: None,
+            seed: 7,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -359,6 +360,82 @@ mod tests {
     }
 
     #[test]
+    fn a_quiet_sim_week_fast_forwards_in_under_a_minute() {
+        let dir = std::env::temp_dir().join(format!("rookery-week-{}", std::process::id()));
+        let args = tour_cmd::RunArgs {
+            script: None,
+            tree: Some(cli("lua/trees/idle.lua")),
+            seconds: 7.0 * 86_400.0,
+            log: dir.clone(),
+            scene: cli("scene/generated/rookery.xml"),
+            id: Some("w".into()),
+            scenario: None,
+            ticks: None,
+            fault_at: None,
+            seed: 7,
+        };
+        let t0 = std::time::Instant::now();
+        tour_cmd::run(&args).expect("week runs");
+        let wall = t0.elapsed().as_secs_f64();
+        let summary: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("w/summary.json")).unwrap())
+                .unwrap();
+        let bio = summary["bio_time"].as_f64().unwrap();
+        assert!(bio >= 7.0 * 86_400.0 - 1.0, "only {bio} s of biology");
+        assert!(wall < 60.0, "a quiet week took {wall:.1} s of wall time");
+        let molts = summary["bio_events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e.as_str().unwrap().contains("Molted"))
+            .count();
+        assert!(molts > 0, "no molts in a week");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn while_the_crane_is_busy_biology_keeps_pace_with_physics() {
+        let mut r = bt_runner(
+            "busy",
+            r#"return Leaf("go.lua")"#,
+            &[(
+                "go.lua",
+                r#"function tick(bb) bb:go_to(Transfer(1, 2)) return "running" end"#,
+            )],
+        );
+        let meta = mast::SceneMeta::load(cli("scene/generated/rookery.json")).unwrap();
+        let cells: Vec<rookery_core::CellId> = (0..16)
+            .map(|i| rookery_core::CellId {
+                tray: 0,
+                r: i / 4,
+                c: i % 4,
+            })
+            .collect();
+        let _ = meta;
+        let world = rookery_core::World::new(rookery_core::LifecycleParams::default(), 7, &cells);
+        let hooks = std::mem::replace(r.hooks_mut(), placeholder_hooks());
+        *r.hooks_mut() = hooks.with_world(world);
+        r.run(20 * 500); // 10 s: the transfer is under way the whole time
+        let sim_t = r.sim().snapshot().time;
+        assert!(!r.hooks().idle(), "the transfer should still be running");
+        assert!(
+            (r.hooks().bio_time() - sim_t).abs() < 1e-6,
+            "bio {} vs sim {sim_t}",
+            r.hooks().bio_time()
+        );
+    }
+
+    /// A throwaway BtHooks, only to swap the real one out of a Runner.
+    fn placeholder_hooks() -> bt_hooks::BtHooks<std::io::Sink> {
+        let r = bt_runner(
+            "placeholder",
+            r#"return Leaf("idle.lua")"#,
+            &[("idle.lua", r#"function tick(bb) return "running" end"#)],
+        );
+        r.into_hooks()
+    }
+
+    #[test]
     fn missing_scene_is_an_error_not_a_panic() {
         assert!(run(&cli("no/such.xml")).is_err());
     }
@@ -382,8 +459,11 @@ mod tour_cmd {
 
     /// Commands tick at 50 Hz (every 20 physics steps at 1 ms), the BT rate from Phase 4.
     const TICK_HZ: f64 = 50.0;
-    /// Upper bound on a tour's sim time, seconds.
+    /// Upper bound on physics time in one run, seconds.
     const MAX_SECONDS: f64 = 300.0;
+    /// Upper bound on biological time in one run (fast-forward makes long
+    /// runs cheap), seconds: one year.
+    const MAX_BIO_SECONDS: f64 = 366.0 * 86_400.0;
 
     #[derive(Debug, clap::Args)]
     pub struct RunArgs {
@@ -399,6 +479,9 @@ mod tour_cmd {
         /// Scenario (Lua): names a tree and ticks, and checks the run (row 4.7)
         #[arg(long)]
         pub scenario: Option<PathBuf>,
+        /// Seed for the animals' lifecycles (row 7.2)
+        #[arg(long, default_value_t = 7)]
+        pub seed: u64,
         /// 50 Hz ticks to run (overrides --seconds and the scenario's ticks)
         #[arg(long)]
         pub ticks: Option<u64>,
@@ -591,7 +674,16 @@ mod tour_cmd {
             targets: kinematics::home(),
             windows: shelf_windows(&meta),
         };
-        let mut hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?;
+        let cells: Vec<rookery_core::CellId> = (0..meta.rows * meta.cols)
+            .map(|i| rookery_core::CellId {
+                tray: 0,
+                r: (i / meta.cols) as u8,
+                c: (i % meta.cols) as u8,
+            })
+            .collect();
+        let world =
+            rookery_core::World::new(rookery_core::LifecycleParams::default(), args.seed, &cells);
+        let mut hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?.with_world(world);
         hooks.fault_at = args.fault_at;
         let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
         let first_qpos = sim.qpos();
@@ -600,8 +692,21 @@ mod tour_cmd {
             .ticks
             .or_else(|| scenario.as_ref().and_then(|s| s.ticks));
         let seconds = ticks.map_or(args.seconds, |t| t as f64 * dt);
-        let steps = (seconds.clamp(0.0, MAX_SECONDS) / dt_phys).round() as usize;
-        runner.run(steps);
+        // The clock (row 7.2): `seconds` is biological time. While the crane
+        // is busy, physics runs and biology keeps pace; while it is idle,
+        // biology jumps to the next stage change, then one physics tick lets
+        // the tree react. The Runner decides, never Lua.
+        let bio_end = seconds.clamp(0.0, MAX_BIO_SECONDS);
+        let max_phys_steps = (MAX_SECONDS / dt_phys) as usize;
+        let mut phys_steps = 0usize;
+        while runner.hooks().bio_time() < bio_end - 1e-9 && phys_steps < max_phys_steps {
+            let left = bio_end - runner.hooks().bio_time();
+            if runner.hooks().idle() && left > dt {
+                runner.hooks_mut().fast_forward(left - dt);
+            }
+            runner.run(every);
+            phys_steps += every;
+        }
         let box_moved = crate::scenario::max_box_displacement(&first_qpos, &runner.sim().qpos());
 
         let hooks = runner.hooks();
@@ -625,6 +730,8 @@ mod tour_cmd {
             "final_targets": hooks.targets().0,
             "errors": hooks.errors,
             "arrivals": hooks.arrivals.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>(),
+            "bio_time": hooks.bio_time(),
+            "bio_events": hooks.bio_events.iter().map(|(t, e)| format!("{t:.0} {e:?}")).collect::<Vec<_>>(),
             "max_box_displacement": box_moved,
         });
         fs::write(

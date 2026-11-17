@@ -22,6 +22,7 @@ use std::io::Write;
 use bt::{BbSchema, Blackboard, GantrySnapshot, Status, Tree};
 use mast::route::{self, Pose};
 use mast::{DONE_TOL, GantryState, JointTargets, SceneMeta};
+use rookery_core::{Event, World};
 use sim::Sim;
 
 use crate::crane::{Crane, Step};
@@ -50,7 +51,23 @@ pub struct BtHooks<W: Write> {
     /// Fault injection (row 6.4): on this command tick, the active command is
     /// replaced by its undo.
     pub fault_at: Option<u64>,
+    /// The animals (row 7.2). Biology advances with every physics tick, and
+    /// jumps ahead in `fast_forward` while the crane is idle.
+    world: Option<World>,
+    /// Biological seconds elapsed.
+    bio_time: f64,
+    /// Lifecycle events with the biological time they happened at.
+    pub bio_events: Vec<(f64, Event)>,
+    /// Command tick length, seconds.
+    tick_dt: f64,
+    /// Consecutive ticks the crane has had nothing to do.
+    idle_ticks: u32,
 }
+
+/// Ticks the crane must sit idle before the clock may fast-forward (0.5 s at
+/// 50 Hz), so a tree between two goals, or one that hasn't ticked yet, gets
+/// the chance to ask for something first.
+pub const IDLE_TICKS_BEFORE_FF: u32 = 25;
 
 impl<W: Write> BtHooks<W> {
     pub fn new(
@@ -78,7 +95,55 @@ impl<W: Write> BtHooks<W> {
             arrivals: Vec::new(),
             arrived: false,
             fault_at: None,
+            world: None,
+            bio_time: 0.0,
+            bio_events: Vec::new(),
+            tick_dt: dt,
+            idle_ticks: 0,
         })
+    }
+
+    /// Give the hooks a World to run (row 7.2).
+    pub fn with_world(mut self, world: World) -> Self {
+        self.world = Some(world);
+        self
+    }
+
+    /// Biological seconds elapsed.
+    pub fn bio_time(&self) -> f64 {
+        self.bio_time
+    }
+
+    /// Whether the crane has nothing to do: no command, nothing queued, no
+    /// goal waiting to be planned. Only then may the clock fast-forward.
+    pub fn idle(&self) -> bool {
+        self.crane_idle() && self.idle_ticks >= IDLE_TICKS_BEFORE_FF
+    }
+
+    fn crane_idle(&self) -> bool {
+        self.crane.route_len() == 0 && self.pending.is_none()
+    }
+
+    /// Fast-forward (row 7.2): with the crane idle, skip physics and advance
+    /// biology straight to the next stage change, capped at `max_dt`.
+    /// Returns the seconds skipped (0 if the crane is busy or there's no world).
+    pub fn fast_forward(&mut self, max_dt: f64) -> f64 {
+        if !self.idle() {
+            return 0.0;
+        }
+        let Some(world) = self.world.as_mut() else {
+            return 0.0;
+        };
+        // A hair past the transition, so it is crossed in this step.
+        let dt = (world.time_to_next_transition() + 1e-6).min(max_dt.max(0.0));
+        if dt <= 0.0 {
+            return 0.0;
+        }
+        let events = world.step(dt);
+        self.bio_time += dt;
+        self.bio_events
+            .extend(events.into_iter().map(|e| (self.bio_time, e)));
+        dt
     }
 
     /// The commanded targets right now.
@@ -110,6 +175,13 @@ impl<W: Write> Hooks for BtHooks<W> {
     }
 
     fn tick(&mut self, sim: &mut Sim) {
+        // Real time: biology advances with the physics tick (row 7.2).
+        self.bio_time += self.tick_dt;
+        if let Some(world) = self.world.as_mut() {
+            for e in world.step(self.tick_dt) {
+                self.bio_events.push((self.bio_time, e));
+            }
+        }
         let obs = self.crane.observe(sim);
         let snap = GantrySnapshot {
             sim_time: sim.snapshot().time,
@@ -159,7 +231,13 @@ impl<W: Write> Hooks for BtHooks<W> {
                 self.crane.ticks() + 1
             ));
         }
-        if let Step::Failed(reason) = self.crane.tick(sim) {
+        let step = self.crane.tick(sim);
+        self.idle_ticks = if self.crane_idle() {
+            self.idle_ticks.saturating_add(1)
+        } else {
+            0
+        };
+        if let Step::Failed(reason) = step {
             self.errors.push(format!("move: {reason}"));
         }
 
