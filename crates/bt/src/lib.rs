@@ -23,7 +23,7 @@
 //!   (memory)  (memory)  {succ, fail thr}   decorators            tick(bb) in Lua
 //!
 //!   Tree ── root: Box<dyn Node> ── load(tree.lua, &Lua) / tick(&mut Blackboard)
-//!   Blackboard ── BbKey<T> ── BbSchema { sim_time, gantry_q, gantry_target, route_len, gantry_goal }
+//!   Blackboard ── BbKey<T> ── BbSchema { sim_time, gantry_q, gantry_target, route_len, gantry_goal, events }
 //! ```
 //!
 //! ## Tree files (contract fixed in 4.1)
@@ -61,7 +61,12 @@ use mast::route::Pose;
 use mlua::Lua;
 
 /// Bumped on any change to [`BbSchema`]'s keys or types.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Version 2 (row 7.5) adds `events`.
+pub const SCHEMA_VERSION: u32 = 2;
+
+/// How many recent events the `events` key keeps. Older ones drop off the
+/// front; a leaf that needs every event remembers the last `seq` it saw.
+pub const EVENTS_KEPT: usize = 32;
 
 /// The result of ticking a node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -289,6 +294,9 @@ pub struct BbSchema {
     pub route_len: BbKey<usize>,
     /// The pose the tree wants. Rust expands it with `mast::route`.
     pub gantry_goal: BbKey<Option<Pose>>,
+    /// The last [`EVENTS_KEPT`] lifecycle events, oldest first (row 7.5).
+    /// Rust appends with [`BbSchema::push_event`]; Lua only reads them.
+    pub events: BbKey<std::collections::VecDeque<BbEvent>>,
 }
 
 impl BbSchema {
@@ -301,10 +309,24 @@ impl BbSchema {
             gantry_target: bb.register("gantry_target"),
             route_len: bb.register("route_len"),
             gantry_goal: bb.register("gantry_goal"),
+            events: bb.register("events"),
         };
         bb.set(&schema.gantry_goal, None);
         bb.set(&schema.route_len, 0);
+        bb.set(&schema.events, std::collections::VecDeque::new());
         schema
+    }
+
+    /// Append one event to `events`, dropping the oldest beyond
+    /// [`EVENTS_KEPT`]. The Integrator calls it as the world publishes, before
+    /// the tree ticks.
+    pub fn push_event(&self, bb: &mut Blackboard, e: BbEvent) {
+        let mut q = bb.get(&self.events).cloned().unwrap_or_default();
+        q.push_back(e);
+        while q.len() > EVENTS_KEPT {
+            q.pop_front();
+        }
+        bb.set(&self.events, q);
     }
 
     /// Fill every snapshot key from `snap`. The Integrator calls this once
@@ -329,6 +351,21 @@ pub struct GantrySnapshot {
     pub gantry_q: [f64; 4],
     pub gantry_target: [f64; 4],
     pub route_len: usize,
+}
+
+/// One lifecycle event as a tree sees it (row 7.5). Plain values, so `bt`
+/// needs no dependency on `rookery-core`; the Integrator converts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BbEvent {
+    /// 1, 2, 3, … in publish order, so a leaf can tell new events from old.
+    pub seq: u64,
+    /// Biological time of the event, seconds.
+    pub t: f64,
+    /// `"Molted"`, `"WindowClosing"`, `"ShellEaten"`, `"BoxLifted"` or `"WindowMissed"`.
+    pub kind: &'static str,
+    pub tray: u8,
+    pub r: u8,
+    pub c: u8,
 }
 
 /// A leaf's failure, kept for the run log and the Phase 4 gate.
