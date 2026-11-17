@@ -323,6 +323,8 @@ impl Hook for PassiveHook {
 ///
 /// 1. every axis within its range in [`limits::RANGES`];
 /// 2. every axis moves at most `limits::MAX_VEL[i] * dt` from `prev`;
+/// 4. (row 6.3) the rail moves only while the arm is at or below
+///    [`limits::ARM_RETRACTED`] in both `prev` and the output;
 /// 3. the arm extends beyond [`limits::ARM_RETRACTED`] only while the mast is
 ///    inside a window of `windows` taller than `ARM_THICKNESS + hook_lift`.
 ///
@@ -391,6 +393,14 @@ pub fn clamp(
             // step is shorter than the one the rate clamp allowed.
             out.0[x] = ARM_RETRACTED;
         }
+    }
+
+    // Carry safety (row 6.3): the truck may run along the rail only with the
+    // arm retracted, so a hanging box is never swept sideways through the
+    // other boxes. Holding the rail at prev is always within range and rate.
+    let y = Axis::RailY.index();
+    if out.0[y] != prev.0[y] && (prev.0[x] > ARM_RETRACTED || out.0[x] > ARM_RETRACTED) {
+        out.0[y] = prev.0[y];
     }
     out
 }
