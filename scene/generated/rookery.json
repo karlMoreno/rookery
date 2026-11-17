@@ -12,6 +12,10 @@
     "solimp": null,
     "solref": null
   },
+  "crawfish": true,
+  "crawfish_length": 0.08,
+  "crawfish_mass": 0.03,
+  "crawfish_radius": 0.012,
   "derived": {
     "exit_pose": [
       -0.395,

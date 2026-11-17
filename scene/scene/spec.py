@@ -45,6 +45,9 @@ CLEARANCE = 0.02
 #: limit is not rejected for float rounding.
 EPS = 1e-9
 
+#: Box wall thickness, mirrored from builder.BOX_WALL for the crawfish fit check.
+BOX_WALL_FOR_SPEC = 0.003
+
 #: Room the J-hook needs above and below its envelope under a handle, metres.
 MIN_HOOK_CLEARANCE = 0.004
 
@@ -125,6 +128,12 @@ class SceneSpec:
     hook_finger: float = 0.04
     hook_radius: float = 0.004
     hook_tip_rise: float = 0.015
+    #: The crawfish in each box (row 5.2): a capsule lying along X on the
+    #: box floor. Length is the capsule's full length, tips included.
+    crawfish: bool = True
+    crawfish_length: float = 0.08
+    crawfish_radius: float = 0.012
+    crawfish_mass: float = 0.03
     #: Contact settings for the hook, handles and box floors (row 5.1).
     contact: ContactParams = field(default_factory=ContactParams)
     #: Clear vertical space between the top of a tray's handles and the
@@ -240,6 +249,9 @@ class SceneSpec:
             "hook_finger": self.hook_finger,
             "hook_radius": self.hook_radius,
             "hook_tip_rise": self.hook_tip_rise,
+            "crawfish_length": self.crawfish_length,
+            "crawfish_radius": self.crawfish_radius,
+            "crawfish_mass": self.crawfish_mass,
         }
         lengths.update({f"box_size[{i}]": v for i, v in enumerate(self.box_size)})
         for name, v in lengths.items():
@@ -273,6 +285,14 @@ class SceneSpec:
                     f"at handle_height {self.handle_height:.3f}; it needs {MIN_HOOK_CLEARANCE * 1000:.0f} mm "
                     "above and below. Raise handle_height or shrink the hook"
                 )
+            if self.preset is None and self.crawfish:
+                inner = min(self.box_size[0], self.box_size[1]) - 2 * BOX_WALL_FOR_SPEC
+                if self.crawfish_length > inner - 2 * CLEARANCE / 4:
+                    p.append(f"crawfish_length {self.crawfish_length:.3f} does not fit inside the box ({inner:.3f})")
+                if self.crawfish_length < 2 * self.crawfish_radius:
+                    p.append("crawfish_length must be at least twice crawfish_radius")
+                if 2 * self.crawfish_radius >= self.box_size[2]:
+                    p.append("the crawfish is taller than the box walls")
             if self.preset is None and self.hook_finger >= min(self.box_size[0], self.box_size[1]) / 2:
                 p.append(f"hook_finger {self.hook_finger:.3f} must be shorter than half the box")
             # Aisle side, from -X inwards: floor rail | exit tray | tray.

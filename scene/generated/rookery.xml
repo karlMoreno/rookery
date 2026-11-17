@@ -191,6 +191,86 @@
       <geom name="post_3_3_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
       <geom name="handle_3_3" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
     </body>
+    <body name="crawfish_0_0" pos="-0.225000 -0.225000 0.016000">
+      <freejoint name="crawfish_0_0_free" />
+      <geom name="crawfish_0_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_0_1" pos="-0.225000 -0.075000 0.016000">
+      <freejoint name="crawfish_0_1_free" />
+      <geom name="crawfish_0_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_0_2" pos="-0.225000 0.075000 0.016000">
+      <freejoint name="crawfish_0_2_free" />
+      <geom name="crawfish_0_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_0_3" pos="-0.225000 0.225000 0.016000">
+      <freejoint name="crawfish_0_3_free" />
+      <geom name="crawfish_0_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_0" pos="-0.075000 -0.225000 0.016000">
+      <freejoint name="crawfish_1_0_free" />
+      <geom name="crawfish_1_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_1" pos="-0.075000 -0.075000 0.016000">
+      <freejoint name="crawfish_1_1_free" />
+      <geom name="crawfish_1_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_2" pos="-0.075000 0.075000 0.016000">
+      <freejoint name="crawfish_1_2_free" />
+      <geom name="crawfish_1_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_3" pos="-0.075000 0.225000 0.016000">
+      <freejoint name="crawfish_1_3_free" />
+      <geom name="crawfish_1_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_0" pos="0.075000 -0.225000 0.016000">
+      <freejoint name="crawfish_2_0_free" />
+      <geom name="crawfish_2_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_1" pos="0.075000 -0.075000 0.016000">
+      <freejoint name="crawfish_2_1_free" />
+      <geom name="crawfish_2_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_2" pos="0.075000 0.075000 0.016000">
+      <freejoint name="crawfish_2_2_free" />
+      <geom name="crawfish_2_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_3" pos="0.075000 0.225000 0.016000">
+      <freejoint name="crawfish_2_3_free" />
+      <geom name="crawfish_2_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_3_0" pos="0.225000 -0.225000 0.016000">
+      <freejoint name="crawfish_3_0_free" />
+      <geom name="crawfish_3_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_3_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_3_1" pos="0.225000 -0.075000 0.016000">
+      <freejoint name="crawfish_3_1_free" />
+      <geom name="crawfish_3_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_3_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_3_2" pos="0.225000 0.075000 0.016000">
+      <freejoint name="crawfish_3_2_free" />
+      <geom name="crawfish_3_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_3_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_3_3" pos="0.225000 0.225000 0.016000">
+      <freejoint name="crawfish_3_3_free" />
+      <geom name="crawfish_3_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_3_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
     <geom name="exit_tray" type="box" size="0.075000 0.075000 0.005000" pos="-0.395000 0.000000 0.095000" rgba="0.200000 0.600000 0.300000 1.000000" />
     <geom name="exit_tray_leg" type="cylinder" size="0.015000 0.050000" pos="-0.395000 0.000000 0.040000" rgba="0.200000 0.600000 0.300000 1.000000" />
     <geom name="floor_rail" type="box" size="0.020000 0.450000 0.020000" pos="-0.590000 0.000000 0.010000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
@@ -221,6 +301,24 @@
       </body>
     </body>
   </worldbody>
+  <sensor>
+    <touch name="touch_0_0" site="crawfish_0_0_site" />
+    <touch name="touch_0_1" site="crawfish_0_1_site" />
+    <touch name="touch_0_2" site="crawfish_0_2_site" />
+    <touch name="touch_0_3" site="crawfish_0_3_site" />
+    <touch name="touch_1_0" site="crawfish_1_0_site" />
+    <touch name="touch_1_1" site="crawfish_1_1_site" />
+    <touch name="touch_1_2" site="crawfish_1_2_site" />
+    <touch name="touch_1_3" site="crawfish_1_3_site" />
+    <touch name="touch_2_0" site="crawfish_2_0_site" />
+    <touch name="touch_2_1" site="crawfish_2_1_site" />
+    <touch name="touch_2_2" site="crawfish_2_2_site" />
+    <touch name="touch_2_3" site="crawfish_2_3_site" />
+    <touch name="touch_3_0" site="crawfish_3_0_site" />
+    <touch name="touch_3_1" site="crawfish_3_1_site" />
+    <touch name="touch_3_2" site="crawfish_3_2_site" />
+    <touch name="touch_3_3" site="crawfish_3_3_site" />
+  </sensor>
   <actuator>
     <position name="rail_y" joint="rail_y" kp="600.000000" dampratio="1.000000" ctrlrange="-0.400000 0.400000" />
     <position name="mast_z" joint="mast_z" kp="300.000000" dampratio="1.000000" ctrlrange="0.050000 0.800000" />
