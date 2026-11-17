@@ -1,7 +1,7 @@
 //! `rookery-core`: the farm's domain model.
 //!
-//! Row 7.1 declares this surface over `todo!()`. Rows 7.3 (state machine),
-//! 7.5 (event bus) and 7.6 (biology) fill it in without changing a
+//! Row 7.1 declared this surface; row 7.3 filled in the state machine and
+//! the bus. Rows 7.5 (shells, events to Lua) and 7.6 (biology) fill in the rest without changing a
 //! signature. The Phase 7 gate (`tests/gates/tests/phase7_lifecycle.rs`,
 //! part A) is written against [`World`] and [`LifecycleParams`].
 //!
@@ -25,7 +25,9 @@
 //! [`CellObs`], so it never needs `sim`, and `mast` never depends on it
 //! (a CI check since Phase 3).
 
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use rand_distr::{Distribution, LogNormal};
 
 /// A 50 Hz tick count, or a biology step count, used to stamp events.
 pub type Tick = u64;
@@ -80,13 +82,60 @@ impl Default for LifecycleParams {
 impl LifecycleParams {
     /// Expected time from one molt to the next: the sum of the stage means.
     pub fn interval_mean(&self) -> f64 {
-        todo!("row 7.3: sum of the stage means")
+        Self::STAGES.iter().map(|&s| self.mean(s)).sum()
     }
 
     /// Expected standard deviation of the molt-to-molt interval, from the
     /// stage variances (the stages are independent).
     pub fn interval_sigma(&self) -> f64 {
-        todo!("row 7.3: sqrt of the summed stage variances")
+        Self::STAGES
+            .iter()
+            .map(|&s| self.sigma(s).powi(2))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    /// Coefficient of variation for every stage but intermolt.
+    pub const STAGE_CV: f64 = 0.1;
+    const STAGES: [MoltStage; 5] = [
+        MoltStage::Intermolt,
+        MoltStage::Premolt,
+        MoltStage::Molting,
+        MoltStage::SoftShell,
+        MoltStage::Hardened,
+    ];
+
+    /// Mean length of `stage`, seconds.
+    pub fn mean(&self, stage: MoltStage) -> f64 {
+        match stage {
+            MoltStage::Intermolt => self.intermolt_mean,
+            MoltStage::Premolt => self.premolt_mean,
+            MoltStage::Molting => self.molting_mean,
+            MoltStage::SoftShell => self.soft_window,
+            MoltStage::Hardened => self.hardened_mean,
+        }
+    }
+
+    /// Standard deviation of the length of `stage`, seconds.
+    pub fn sigma(&self, stage: MoltStage) -> f64 {
+        match stage {
+            MoltStage::Intermolt => self.intermolt_sigma,
+            s => Self::STAGE_CV * self.mean(s),
+        }
+    }
+
+    /// Draw a length for `stage`: lognormal with the stage's mean and sigma
+    /// (so always positive). Parameters: σ_ln² = ln(1 + σ²/m²), μ_ln = ln m − σ_ln²/2.
+    pub fn draw(&self, stage: MoltStage, rng: &mut ChaCha8Rng) -> f64 {
+        let (m, s) = (self.mean(stage), self.sigma(stage));
+        if m <= 0.0 {
+            return 0.0;
+        }
+        let var_ln = (1.0 + (s / m).powi(2)).ln();
+        let mu = m.ln() - var_ln / 2.0;
+        LogNormal::new(mu, var_ln.sqrt())
+            .map(|d| d.sample(rng))
+            .unwrap_or(m)
     }
 }
 
@@ -96,6 +145,29 @@ pub struct CellId {
     pub tray: u8,
     pub r: u8,
     pub c: u8,
+}
+
+impl CellId {
+    /// A placeholder cell: `Crawfish::step` doesn't know where it lives, and
+    /// `World` fills in the real cell.
+    pub const NONE: CellId = CellId {
+        tray: u8::MAX,
+        r: u8::MAX,
+        c: u8::MAX,
+    };
+}
+
+impl Event {
+    /// The same event, for `cell`.
+    pub fn at(self, cell: CellId) -> Event {
+        match self {
+            Event::Molted(_) => Event::Molted(cell),
+            Event::WindowClosing(_) => Event::WindowClosing(cell),
+            Event::ShellEaten(_) => Event::ShellEaten(cell),
+            Event::BoxLifted(_) => Event::BoxLifted(cell),
+            Event::WindowMissed(_) => Event::WindowMissed(cell),
+        }
+    }
 }
 
 /// Something that happened to the animal in a cell.
@@ -123,12 +195,30 @@ pub struct Crawfish {
     pub next_transition: f64,
 }
 
+impl MoltStage {
+    /// The stage that follows this one.
+    pub fn next(self) -> MoltStage {
+        match self {
+            MoltStage::Intermolt => MoltStage::Premolt,
+            MoltStage::Premolt => MoltStage::Molting,
+            MoltStage::Molting => MoltStage::SoftShell,
+            MoltStage::SoftShell => MoltStage::Hardened,
+            MoltStage::Hardened => MoltStage::Intermolt,
+        }
+    }
+}
+
 impl Crawfish {
     /// A new animal at a random point of its intermolt, so a world doesn't
     /// molt in lockstep.
     pub fn new(params: &LifecycleParams, rng: &mut ChaCha8Rng) -> Self {
-        let _ = (params, rng);
-        todo!("row 7.3: start in Intermolt at a random phase")
+        let next_transition = params.draw(MoltStage::Intermolt, rng);
+        let t_in_stage = rng.random::<f64>() * next_transition;
+        Self {
+            stage: MoltStage::Intermolt,
+            t_in_stage,
+            next_transition,
+        }
     }
 
     /// Advance by `bio_dt` seconds. Returns the event of a stage change, if any.
@@ -138,8 +228,28 @@ impl Crawfish {
         params: &LifecycleParams,
         rng: &mut ChaCha8Rng,
     ) -> Option<Event> {
-        let _ = (bio_dt, params, rng);
-        todo!("row 7.3: advance, transition, draw the next duration")
+        // One step may cross several short stages (molting lasts about an
+        // hour). Each crossing may produce an event; `Molted` wins, because
+        // the molt count is what the farm (and the gate) is built on.
+        self.t_in_stage += bio_dt.max(0.0);
+        let mut event = None;
+        while self.t_in_stage >= self.next_transition {
+            self.t_in_stage -= self.next_transition;
+            let from = self.stage;
+            self.stage = from.next();
+            self.next_transition = params.draw(self.stage, rng).max(f64::MIN_POSITIVE);
+            let e = match (from, self.stage) {
+                (MoltStage::Premolt, MoltStage::Molting) => Some(Event::Molted(CellId::NONE)),
+                (MoltStage::SoftShell, MoltStage::Hardened) => {
+                    Some(Event::WindowClosing(CellId::NONE))
+                }
+                _ => None,
+            };
+            if !matches!(event, Some(Event::Molted(_))) && e.is_some() {
+                event = e;
+            }
+        }
+        event
     }
 }
 
@@ -165,13 +275,14 @@ impl std::fmt::Debug for EventBus {
 
 impl EventBus {
     pub fn subscribe(&mut self, f: Subscriber) {
-        let _ = (f, &mut self.subscribers);
-        todo!("row 7.5")
+        self.subscribers.push(f);
     }
 
     pub fn publish(&mut self, tick: Tick, e: Event) {
-        let _ = (tick, e);
-        todo!("row 7.5: log, then call every subscriber")
+        self.log.push((tick, e));
+        for s in &mut self.subscribers {
+            s(&e, tick);
+        }
     }
 
     pub fn log(&self) -> &[(Tick, Event)] {
@@ -192,15 +303,34 @@ impl World {
     /// One animal per cell, all drawn from `seed`, so the same seed gives
     /// the same history.
     pub fn new(params: LifecycleParams, seed: u64, cells: &[CellId]) -> Self {
-        let _ = (params, seed, cells);
-        todo!("row 7.3: seed the rng, create one Crawfish per cell")
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let animals = cells
+            .iter()
+            .map(|&c| (c, Crawfish::new(&params, &mut rng)))
+            .collect();
+        World {
+            params,
+            rng,
+            animals,
+            bus: EventBus::default(),
+            steps: 0,
+        }
     }
 
     /// Advance every animal by `bio_dt` seconds, publish their events and
     /// return them.
     pub fn step(&mut self, bio_dt: f64) -> Vec<Event> {
-        let _ = (bio_dt, &mut self.rng, &mut self.animals, self.steps);
-        todo!("rows 7.3 + 7.5: step each animal, publish, return")
+        self.steps += 1;
+        let mut out = Vec::new();
+        for (cell, animal) in &mut self.animals {
+            if let Some(e) = animal.step(bio_dt, &self.params, &mut self.rng) {
+                out.push(e.at(*cell));
+            }
+        }
+        for e in &out {
+            self.bus.publish(self.steps, *e);
+        }
+        out
     }
 
     /// The animals and their cells.
