@@ -293,8 +293,8 @@
           <body name="crane_hook" pos="0.000000 0.000000 0.000000" gravcomp="1">
             <joint name="hook_lift" type="slide" axis="0.000000 0.000000 1.000000" range="0.000000 0.030000" limited="true" ref="0.000000" damping="5.000000" armature="0.050000" />
             <inertial pos="0.000000 0.000000 0.000000" mass="0.100000" diaginertia="0.010000 0.010000 0.010000" />
-            <geom name="hook" type="capsule" size="0.004000" fromto="0.000000 0.000000 0.000000 0.040000 0.000000 0.000000" rgba="0.800000 0.200000 0.200000 1.000000" />
-            <geom name="hook_tip" type="capsule" size="0.004000" fromto="0.040000 0.000000 0.000000 0.040000 0.000000 0.015000" rgba="0.800000 0.200000 0.200000 1.000000" />
+            <geom name="hook" type="box" size="0.020000 0.015000 0.004000" pos="0.020000 0.000000 0.000000" rgba="0.800000 0.200000 0.200000 1.000000" />
+            <geom name="hook_tip" type="box" size="0.004000 0.015000 0.007500" pos="0.040000 0.000000 0.007500" rgba="0.800000 0.200000 0.200000 1.000000" />
             <geom name="hook_stem" type="capsule" size="0.004000" fromto="0.000000 0.000000 0.000000 0.000000 0.000000 0.020000" contype="0" conaffinity="0" rgba="0.800000 0.200000 0.200000 1.000000" />
           </body>
         </body>
@@ -321,9 +321,9 @@
   </sensor>
   <actuator>
     <position name="rail_y" joint="rail_y" kp="600.000000" dampratio="1.000000" ctrlrange="-0.400000 0.400000" />
-    <position name="mast_z" joint="mast_z" kp="300.000000" dampratio="1.000000" ctrlrange="0.050000 0.800000" />
+    <position name="mast_z" joint="mast_z" kp="2000.000000" dampratio="1.000000" ctrlrange="0.050000 0.800000" />
     <position name="arm_x" joint="arm_x" kp="200.000000" dampratio="1.000000" ctrlrange="0.000000 0.850000" />
-    <position name="hook_lift" joint="hook_lift" kp="100.000000" dampratio="1.000000" ctrlrange="0.000000 0.030000" />
+    <position name="hook_lift" joint="hook_lift" kp="2000.000000" dampratio="1.000000" ctrlrange="0.000000 0.030000" />
   </actuator>
   <keyframe>
     <key name="home" ctrl="0.000000 0.450000 0.000000 0.000000" />

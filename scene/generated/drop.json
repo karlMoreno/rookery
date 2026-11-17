@@ -31,6 +31,7 @@
   "hook_finger": 0.04,
   "hook_radius": 0.004,
   "hook_tip_rise": 0.015,
+  "hook_width": 0.03,
   "preset": "drop",
   "rail_x": null,
   "rows": 4,
