@@ -264,3 +264,18 @@ fn a_broken_edit_keeps_the_old_code_and_reports_it() {
         "{e:?}"
     );
 }
+
+#[test]
+fn a_leaf_can_ask_for_a_transfer() {
+    // Row 6.5: Transfer(r, c) is a goal like any pose.
+    let d = dir("transfer");
+    write(
+        &d,
+        "t.lua",
+        r#"function tick(bb) bb:go_to(Transfer(1, 2)) return "running" end"#,
+    );
+    let mut tree = load(&d, r#"return Leaf("t.lua")"#);
+    let (mut bb, s) = board();
+    assert_eq!(tree.tick(&mut bb), Status::Running);
+    assert_eq!(bb.get(&s.gantry_goal), Some(&Some(Pose::Transfer(1, 2))));
+}

@@ -47,6 +47,8 @@ pub struct RunLog {
     pub errors: Vec<String>,
     pub max_box_displacement: f64,
     pub final_q: [f64; 4],
+    /// Cells whose box moved more than 1 mm during the run (row 6.5).
+    pub moved_boxes: Vec<(usize, usize)>,
 }
 
 impl Scenario {
@@ -127,6 +129,11 @@ impl Scenario {
                     Value::Table(lua.create_sequence_from([r, c])?)
                 }
                 Pose::Exit => Value::String(lua.create_string("exit")?),
+                Pose::Transfer(r, c) => {
+                    let t = lua.create_table()?;
+                    t.set("transfer", lua.create_sequence_from([r, c])?)?;
+                    Value::Table(t)
+                }
                 Pose::Home => Value::String(lua.create_string("home")?),
             };
             visited.set(i + 1, v)?;
@@ -139,8 +146,27 @@ impl Scenario {
         )?;
         t.set("max_box_displacement", log.max_box_displacement)?;
         t.set("final_q", lua.create_sequence_from(log.final_q)?)?;
+        let moved = lua.create_table()?;
+        for (i, (r, c)) in log.moved_boxes.iter().enumerate() {
+            moved.set(i + 1, lua.create_sequence_from([*r, *c])?)?;
+        }
+        t.set("moved_boxes", moved)?;
         Ok(t)
     }
+}
+
+/// Cells whose box moved more than 1 mm between two qpos vectors. The
+/// boxes' free joints come first in qpos, row-major (`box_0_0, box_0_1, …`).
+pub fn moved_boxes(first: &[f64], last: &[f64], rows: usize, cols: usize) -> Vec<(usize, usize)> {
+    (0..rows * cols)
+        .filter(|&b| {
+            (0..3).any(|k| {
+                let i = 7 * b + k;
+                i < first.len() && i < last.len() && (last[i] - first[i]).abs() > 0.001
+            })
+        })
+        .map(|b| (b / cols, b % cols))
+        .collect()
 }
 
 /// The largest position change of any free-joint body between two qpos

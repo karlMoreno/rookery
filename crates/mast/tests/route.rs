@@ -56,3 +56,11 @@ fn a_cell_outside_the_grid_is_an_error() {
 fn home_to_home_is_empty() {
     assert!(route(home(), Pose::Home, &meta()).unwrap().is_empty());
 }
+
+#[test]
+fn a_transfer_is_a_job_not_a_route() {
+    assert!(matches!(
+        route(home(), Pose::Transfer(1, 1), &meta()),
+        Err(RouteError::NotARoute(Pose::Transfer(1, 1)))
+    ));
+}
