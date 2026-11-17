@@ -4,30 +4,36 @@
 --
 --   rookery run --scenario lua/scenarios/week.lua --log runs/
 --
--- ci = false until the fast-forward clock (row 7.2) exists: a sim-week at
--- 1 kHz physics is 604,800 s of sim time and would hang CI. Switch it on
--- in row 7.5, when the shell mover and the events log land.
+-- It runs in CI because the clock fast-forwards (row 7.2): physics only
+-- runs for a tick after each stage change, so a week takes about a second.
+-- The shell mover and the events log came in row 7.5.
 
-ci = false
+ci = true
 tree = "../trees/idle.lua"
 ticks = 7 * 24 * 3600 * 50 -- one week at 50 Hz; fast-forward skips the quiet stretches
 
 function check(log)
   if log.events == nil or log.shells == nil then
-    return false, "the run log has no events or shells yet (rows 7.2 and 7.5)"
+    return false, "the run log has no events or shells"
   end
-  local molts = 0
+  local molts, eaten = 0, 0
   for _, e in ipairs(log.events) do
+    local key = e.r .. "," .. e.c
     if e.kind == "Molted" then
       molts = molts + 1
-      local key = e.r .. "," .. e.c
-      if not log.shells[key] then
+      local s = log.shells[key]
+      if not (s and s.inside) then
         return false, "Molted at " .. key .. " but no shell in that box"
       end
+    elseif e.kind == "ShellEaten" then
+      eaten = eaten + 1
     end
   end
   if molts == 0 then
     return false, "no molt in a week"
   end
-  return true, string.format("%d molts in a week, every shell in its box", molts)
+  if log.max_box_displacement > 0.002 then
+    return false, string.format("a box or crawfish moved %.4f m", log.max_box_displacement)
+  end
+  return true, string.format("%d molts in a week, every shell in its box (%d eaten since)", molts, eaten)
 end

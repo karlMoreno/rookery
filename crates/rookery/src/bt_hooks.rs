@@ -5,7 +5,9 @@
 //!
 //! ```text
 //!   pre_step (1 ms)   crane.apply(sim)                       targets → actuators
-//!   tick (20 ms)      obs = crane.observe(sim)
+//!   tick (20 ms)      world.step(20 ms) → events → bb `events` + run log (7.2, 7.5)
+//!                     shells.apply(sim)                       move shed shells (7.5)
+//!                     obs = crane.observe(sim)
 //!                     schema.write_snapshot(bb, {sim_time, q, targets, route_len})
 //!                     tree.tick(bb)                           Lua leaves read bb, may bb:go_to(pose)
 //!                     new goal? → drop the queue (the current move finishes)
@@ -19,14 +21,15 @@
 
 use std::io::Write;
 
-use bt::{BbSchema, Blackboard, GantrySnapshot, Status, Tree};
+use bt::{BbEvent, BbSchema, Blackboard, GantrySnapshot, Status, Tree};
 use mast::route::{self, Pose};
 use mast::{DONE_TOL, GantryState, JointTargets, SceneMeta};
-use rookery_core::{Event, World};
+use rookery_core::{CellId, Event, World};
 use sim::Sim;
 
 use crate::crane::{Crane, Step};
 use crate::runner::Hooks;
+use crate::shells::ShellMover;
 
 /// Hooks that let a behavior tree drive the crane through goals.
 pub struct BtHooks<W: Write> {
@@ -62,6 +65,10 @@ pub struct BtHooks<W: Write> {
     tick_dt: f64,
     /// Consecutive ticks the crane has had nothing to do.
     idle_ticks: u32,
+    /// Moves shed shells on `Molted` / `ShellEaten` (row 7.5).
+    pub shells: Option<ShellMover>,
+    /// Events handed to the tree so far (the `seq` of the last one).
+    event_seq: u64,
 }
 
 /// Ticks the crane must sit idle before the clock may fast-forward (0.5 s at
@@ -100,7 +107,37 @@ impl<W: Write> BtHooks<W> {
             bio_events: Vec::new(),
             tick_dt: dt,
             idle_ticks: 0,
+            shells: None,
+            event_seq: 0,
         })
+    }
+
+    /// Give the hooks a shell mover, already subscribed to the world's bus
+    /// (row 7.5).
+    pub fn with_shells(mut self, mover: Option<ShellMover>) -> Self {
+        self.shells = mover;
+        self
+    }
+
+    /// Log events at the current biological time and hand them to the tree
+    /// through the `events` key (row 7.5).
+    fn record(&mut self, events: Vec<Event>) {
+        for e in events {
+            self.event_seq += 1;
+            let (kind, cell) = describe(e);
+            self.schema.push_event(
+                &mut self.bb,
+                BbEvent {
+                    seq: self.event_seq,
+                    t: self.bio_time,
+                    kind,
+                    tray: cell.tray,
+                    r: cell.r,
+                    c: cell.c,
+                },
+            );
+            self.bio_events.push((self.bio_time, e));
+        }
     }
 
     /// Give the hooks a World to run (row 7.2).
@@ -141,8 +178,9 @@ impl<W: Write> BtHooks<W> {
         }
         let events = world.step(dt);
         self.bio_time += dt;
-        self.bio_events
-            .extend(events.into_iter().map(|e| (self.bio_time, e)));
+        // The shell mover's inbox has these too; it acts on the next tick,
+        // which the clock always runs right after a jump.
+        self.record(events);
         dt
     }
 
@@ -169,6 +207,17 @@ impl<W: Write> BtHooks<W> {
     }
 }
 
+/// An event's name (as Lua sees it) and its cell.
+pub fn describe(e: Event) -> (&'static str, CellId) {
+    match e {
+        Event::Molted(c) => ("Molted", c),
+        Event::WindowClosing(c) => ("WindowClosing", c),
+        Event::ShellEaten(c) => ("ShellEaten", c),
+        Event::BoxLifted(c) => ("BoxLifted", c),
+        Event::WindowMissed(c) => ("WindowMissed", c),
+    }
+}
+
 impl<W: Write> Hooks for BtHooks<W> {
     fn pre_step(&mut self, sim: &mut Sim) {
         self.crane.apply(sim);
@@ -178,9 +227,13 @@ impl<W: Write> Hooks for BtHooks<W> {
         // Real time: biology advances with the physics tick (row 7.2).
         self.bio_time += self.tick_dt;
         if let Some(world) = self.world.as_mut() {
-            for e in world.step(self.tick_dt) {
-                self.bio_events.push((self.bio_time, e));
-            }
+            let events = world.step(self.tick_dt);
+            self.record(events);
+        }
+        // Shells move before the snapshot, so the tree and physics see them.
+        if let Some(mover) = self.shells.as_mut() {
+            let errors = mover.apply(sim, self.bio_time);
+            self.errors.extend(errors);
         }
         let obs = self.crane.observe(sim);
         let snap = GantrySnapshot {
