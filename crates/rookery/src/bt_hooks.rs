@@ -136,9 +136,20 @@ impl<W: Write> Hooks for BtHooks<W> {
             && !self.crane.has_current()
         {
             self.pending = None;
-            match route::route(self.crane.targets(), pose, &self.meta) {
-                Ok(cmds) => self.crane.enqueue(cmds),
-                Err(e) => self.errors.push(format!("route: goal {pose:?}: {e}")),
+            if let Pose::Transfer(r, c) = pose {
+                // A job, not a place (row 6.5): one Transfer macro, so a
+                // fault can undo it as a whole.
+                match mast::Transfer::build(self.crane.targets(), r, c, &self.meta) {
+                    Ok(t) => self
+                        .crane
+                        .enqueue_command(Box::new(t), format!("transfer ({r}, {c})")),
+                    Err(e) => self.errors.push(format!("route: goal {pose:?}: {e}")),
+                }
+            } else {
+                match route::route(self.crane.targets(), pose, &self.meta) {
+                    Ok(cmds) => self.crane.enqueue(cmds),
+                    Err(e) => self.errors.push(format!("route: goal {pose:?}: {e}")),
+                }
             }
         }
 

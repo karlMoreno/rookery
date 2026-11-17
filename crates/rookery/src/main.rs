@@ -558,6 +558,7 @@ mod tour_cmd {
             .ok_or("give --script, --tree, or a --scenario that names a tree")?;
         let tree_path = &tree_owned;
         let meta = SceneMeta::load(args.scene.with_extension("json")).map_err(|e| e.to_string())?;
+        let (hooks_meta_rows, hooks_meta_cols) = (meta.rows, meta.cols);
         if let Some(s) = &scenario {
             s.setup(meta.rows, meta.cols)?;
         }
@@ -649,6 +650,12 @@ mod tour_cmd {
                 errors: hooks.errors.clone(),
                 max_box_displacement: box_moved,
                 final_q: hooks.crane().observe(runner.sim()).q,
+                moved_boxes: crate::scenario::moved_boxes(
+                    &first_qpos,
+                    &runner.sim().qpos(),
+                    hooks_meta_rows,
+                    hooks_meta_cols,
+                ),
             };
             let (ok, msg) = s.check(&log)?;
             let verdict = format!(

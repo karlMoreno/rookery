@@ -39,6 +39,10 @@ pub enum Pose {
     Cell(usize, usize),
     /// Engaged under the handle of a box on the exit tray.
     Exit,
+    /// Not a place but a job (row 6.5): move the box in cell (row, col) to
+    /// the exit tray and return home. `route` refuses it, and the crane
+    /// player runs `Transfer::build` instead.
+    Transfer(usize, usize),
 }
 
 /// Why a route could not be built.
@@ -51,6 +55,8 @@ pub enum RouteError {
         rows: usize,
         cols: usize,
     },
+    /// The pose is a job, not a place to route to (`Pose::Transfer`).
+    NotARoute(Pose),
 }
 
 impl std::fmt::Display for RouteError {
@@ -59,6 +65,7 @@ impl std::fmt::Display for RouteError {
             Self::NoSuchCell { r, c, rows, cols } => {
                 write!(f, "Cell({r}, {c}) is outside the {rows}x{cols} grid")
             }
+            Self::NotARoute(p) => write!(f, "{p:?} is a job, not a place to route to"),
         }
     }
 }
@@ -119,7 +126,11 @@ impl Plan {
             self.go(Axis::MastZ, travel.max(self.at.0[Axis::MastZ.index()]));
             self.go(Axis::ArmX, 0.0);
         }
+        if let Pose::Transfer(..) = pose {
+            return Err(RouteError::NotARoute(pose));
+        }
         let target = match pose {
+            Pose::Transfer(..) => unreachable!("refused above"),
             Pose::Home => {
                 let h = kinematics::home();
                 self.go(Axis::MastZ, h.0[Axis::MastZ.index()]);

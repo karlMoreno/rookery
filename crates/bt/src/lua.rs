@@ -51,6 +51,7 @@ function Leaf(path, ...) return { kind = "Leaf", path = path, args = table.pack(
 function Home() return { pose = "Home" } end
 function Exit() return { pose = "Exit" } end
 function Cell(r, c) return { pose = "Cell", r = r, c = c } end
+function Transfer(r, c) return { pose = "Transfer", r = r, c = c } end
 "#;
 
 /// Load `path` as a tree file and build its nodes.
@@ -356,6 +357,11 @@ fn pose_to_lua(lua: &Lua, p: Option<Pose>) -> mlua::Result<Value> {
             t.set("r", r)?;
             t.set("c", c)?;
         }
+        Pose::Transfer(r, c) => {
+            t.set("pose", "Transfer")?;
+            t.set("r", r)?;
+            t.set("c", c)?;
+        }
     }
     Ok(Value::Table(t))
 }
@@ -363,7 +369,7 @@ fn pose_to_lua(lua: &Lua, p: Option<Pose>) -> mlua::Result<Value> {
 fn pose_from_lua(v: &Value) -> Result<Pose, String> {
     let bad = || {
         format!(
-            "bb:go_to expects Home(), Exit() or Cell(r, c), got {}",
+            "bb:go_to expects Home(), Exit(), Cell(r, c) or Transfer(r, c), got {}",
             v.type_name()
         )
     };
@@ -374,12 +380,17 @@ fn pose_from_lua(v: &Value) -> Result<Pose, String> {
     match kind.as_str() {
         "Home" => Ok(Pose::Home),
         "Exit" => Ok(Pose::Exit),
-        "Cell" => {
+        "Cell" | "Transfer" => {
             let idx = |k: &str| -> Result<usize, String> {
-                let n: i64 = t.get(k).map_err(|_| format!("Cell needs integer {k}"))?;
-                usize::try_from(n).map_err(|_| format!("Cell {k} must be ≥ 0, got {n}"))
+                let n: i64 = t.get(k).map_err(|_| format!("{kind} needs integer {k}"))?;
+                usize::try_from(n).map_err(|_| format!("{kind} {k} must be ≥ 0, got {n}"))
             };
-            Ok(Pose::Cell(idx("r")?, idx("c")?))
+            let (r, c) = (idx("r")?, idx("c")?);
+            Ok(if kind == "Cell" {
+                Pose::Cell(r, c)
+            } else {
+                Pose::Transfer(r, c)
+            })
         }
         other => Err(format!("bb:go_to: unknown pose `{other}`")),
     }
