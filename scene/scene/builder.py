@@ -10,6 +10,7 @@ at the end:
     .tray()        body tray_0: floor + 4 walls                    (2.3)
     .water()       geom water: translucent, contact-free           (2.3)
     .cells()       box_r_c + handle_r_c, row-major                 (2.4)
+    .crawfish()    crawfish_r_c capsule + touch_r_c sensor          (5.2)
     .exit_tray()   geom exit_tray between tray and rail            (2.5)
     .crane_frame() floor_rail + guide_rail (static, contact-free)  (2.5)
     .gantry()      rail_y → mast_z → arm_x → hook_lift, actuators   (3.2)
@@ -57,6 +58,7 @@ BOX_RGBA = (0.85, 0.45, 0.15, 1.0)
 POST_RADIUS = 0.003
 HANDLE_RGBA = (0.9, 0.85, 0.2, 1.0)
 EXIT_RGBA = (0.2, 0.6, 0.3, 1.0)
+CRAWFISH_RGBA = (0.7, 0.25, 0.2, 1.0)
 #: Drop preset: cube edge and release height, in metres (Phase 1 gate: rest at DROP_BOX / 2).
 DROP_BOX = 0.1
 DROP_HEIGHT = 0.5
@@ -271,6 +273,36 @@ class MjcfBuilder:
                                         ("rgba", num(*HANDLE_RGBA)), *self._contact()])
         return self
 
+    def crawfish(self) -> MjcfBuilder:
+        """One crawfish per box (row 5.2): body ``crawfish_r_c``, a capsule on
+        its own free joint lying along X on the box floor, with a site
+        ``crawfish_r_c_site`` (slightly larger than the capsule) and a touch
+        sensor ``touch_r_c`` that sums the normal contact force on it.
+
+        It rides along when the box is lifted. The Phase 5 gate reads its
+        contact force to make sure the lift never crushes it.
+        """
+        s = self.spec
+        if not s.crawfish:
+            return self
+        r = s.crawfish_radius
+        half = s.crawfish_length / 2 - r  # capsule segment half-length
+        sensor = self._el(self.root, "sensor")
+        for row in range(s.rows):
+            for col in range(s.cols):
+                x, y = s.cell_center(row, col)
+                tag = f"{row}_{col}"
+                body = self._el(self.worldbody, "body", [("name", f"crawfish_{tag}"),
+                                                          ("pos", num(x, y, BOX_FLOOR + r))])
+                self._el(body, "freejoint", [("name", f"crawfish_{tag}_free")])
+                self._el(body, "geom", [("name", f"crawfish_{tag}_body"), ("type", "capsule"),
+                                        ("fromto", num(-half, 0, 0, half, 0, 0)), ("size", num(r)),
+                                        ("mass", num(s.crawfish_mass)), ("rgba", num(*CRAWFISH_RGBA))])
+                self._el(body, "site", [("name", f"crawfish_{tag}_site"), ("type", "capsule"),
+                                        ("fromto", num(-half, 0, 0, half, 0, 0)), ("size", num(r * 1.1))])
+                self._el(sensor, "touch", [("name", f"touch_{tag}"), ("site", f"crawfish_{tag}_site")])
+        return self
+
     def exit_tray(self) -> MjcfBuilder:
         """Geom ``exit_tray``: a square plate (one cell) whose top is at ``spec.exit_pose``,
         on a leg down to the ground. Static, so it is part of the world body."""
@@ -447,7 +479,7 @@ def build_scene(spec: SceneSpec) -> str:
     """The scene for ``spec``: the named preset, or else the farm."""
     if spec.preset == "drop":
         return MjcfBuilder(spec).drop().build()
-    return MjcfBuilder(spec).header().tray().water().cells().exit_tray().crane_frame().gantry().build()
+    return MjcfBuilder(spec).header().tray().water().cells().crawfish().exit_tray().crane_frame().gantry().build()
 
 
 def spec_from_json(text: str) -> SceneSpec:
