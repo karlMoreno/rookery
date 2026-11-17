@@ -1,5 +1,5 @@
 //! Row 4.4: the mlua bridge. Tree files, Lua leaves, the read-only `bb` view,
-//! `bb:goto` and hot reload.
+//! `bb:go_to` and hot reload.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -51,7 +51,7 @@ fn a_leaf_reads_the_snapshot_and_sets_a_goal() {
         "go.lua",
         r#"function tick(bb, r, c)
              assert(bb.sim_time == 2.5 and bb.gantry_q[2] == 0.45 and bb.route_len == 0)
-             bb:goto(Cell(r, c))
+             bb:go_to(Cell(r, c))
              return "running"
            end"#,
     );
@@ -108,7 +108,7 @@ fn an_unknown_key_and_a_bad_goto_are_named_errors() {
     write(
         &d,
         "g.lua",
-        r#"function tick(bb) bb:goto(42) return "success" end"#,
+        r#"function tick(bb) bb:go_to(42) return "success" end"#,
     );
     let mut tree = load(
         &d,
@@ -128,7 +128,7 @@ fn an_unknown_key_and_a_bad_goto_are_named_errors() {
     );
     assert!(
         msgs.iter()
-            .any(|m| m.starts_with("g:") && m.contains("bb:goto expects")),
+            .any(|m| m.starts_with("g:") && m.contains("bb:go_to expects")),
         "{msgs:?}"
     );
     assert_eq!(
@@ -144,7 +144,7 @@ fn a_goal_set_before_an_error_is_dropped() {
     write(
         &d,
         "half.lua",
-        r#"function tick(bb) bb:goto(Home()) error("later") end"#,
+        r#"function tick(bb) bb:go_to(Home()) error("later") end"#,
     );
     let mut tree = load(&d, r#"return Leaf("half.lua")"#);
     let (mut bb, s) = board();

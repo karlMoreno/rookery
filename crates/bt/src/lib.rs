@@ -44,7 +44,8 @@
 //! which returns `"success"`, `"failure"` or `"running"`.
 //!
 //! **Lua sets goals, never raw targets** ([Band 1] lesson, see #19): the only
-//! write a leaf has is a goal pose (`bb:goto(pose)`). Rust expands it with
+//! write a leaf has is a goal pose (`bb:go_to(pose)`; not `goto`, which is a
+//! reserved word in Lua 5.4). Rust expands it with
 //! `mast::route` and plays it through `mast::clamp`.
 
 mod lua;

@@ -7,7 +7,7 @@
 //!   LuaLeaf::tick(bb)
 //!     every 10 ticks: mtime changed on two checks in a row? → reload (keep old code on error)
 //!     view = read-only table { sim_time, gantry_q, gantry_target, route_len, goal }
-//!            + bb:goto(pose)   ← the only write, a goal pose (Home() / Exit() / Cell(r, c))
+//!            + bb:go_to(pose)   ← the only write, a goal pose (Home() / Exit() / Cell(r, c))
 //!     tick(view, args…) via mlua (a Lua error comes back as Err, never a panic)
 //!       Ok("success" | "failure" | "running") → Status
 //!       Err(e) → LeafError { leaf, message } + warn! → Status::Failure
@@ -281,7 +281,7 @@ fn status_of(v: &Value) -> Result<Status, String> {
     }
 }
 
-/// The read-only blackboard view a leaf sees, plus `bb:goto(pose)`.
+/// The read-only blackboard view a leaf sees, plus `bb:go_to(pose)`.
 fn view(
     lua: &Lua,
     bb: &Blackboard,
@@ -303,7 +303,7 @@ fn view(
         data.set("goal", pose_to_lua(lua, *g)?)?;
     }
     data.set(
-        "goto",
+        "go_to",
         lua.create_function(move |_, (_this, pose): (Value, Value)| {
             let p = pose_from_lua(&pose).map_err(mlua::Error::runtime)?;
             *goal.borrow_mut() = Some(Some(p));
@@ -319,7 +319,7 @@ fn view(
         "gantry_target",
         "route_len",
         "goal",
-        "goto",
+        "go_to",
     ];
     let d = data.clone();
     meta.set(
@@ -337,7 +337,7 @@ fn view(
         lua.create_function(|_, (_t, k): (Value, Value)| -> mlua::Result<()> {
             let k = k.to_string().unwrap_or_default();
             Err(mlua::Error::runtime(format!(
-                "blackboard is read-only (tried to set `{k}`); use bb:goto(Home() | Exit() | Cell(r, c))"
+                "blackboard is read-only (tried to set `{k}`); use bb:go_to(Home() | Exit() | Cell(r, c))"
             )))
         })?,
     )?;
@@ -363,7 +363,7 @@ fn pose_to_lua(lua: &Lua, p: Option<Pose>) -> mlua::Result<Value> {
 fn pose_from_lua(v: &Value) -> Result<Pose, String> {
     let bad = || {
         format!(
-            "bb:goto expects Home(), Exit() or Cell(r, c), got {}",
+            "bb:go_to expects Home(), Exit() or Cell(r, c), got {}",
             v.type_name()
         )
     };
@@ -381,6 +381,6 @@ fn pose_from_lua(v: &Value) -> Result<Pose, String> {
             };
             Ok(Pose::Cell(idx("r")?, idx("c")?))
         }
-        other => Err(format!("bb:goto: unknown pose `{other}`")),
+        other => Err(format!("bb:go_to: unknown pose `{other}`")),
     }
 }
