@@ -401,6 +401,17 @@ mod tests {
             "{shells:?}"
         );
         assert!(summary["max_box_displacement"].as_f64().unwrap() < 0.002);
+        // Row 7.7: the same events as data, for scene.plots molt_hist.
+        let events = summary["events"].as_array().unwrap();
+        assert_eq!(
+            events.len(),
+            summary["bio_events"].as_array().unwrap().len()
+        );
+        assert_eq!(
+            events.iter().filter(|e| e["kind"] == "Molted").count(),
+            molts
+        );
+        assert!(summary["lifecycle"]["interval_mean"].as_f64().unwrap() > 20.0 * 86_400.0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -756,6 +767,17 @@ mod tour_cmd {
             "arrivals": hooks.arrivals.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>(),
             "bio_time": hooks.bio_time(),
             "bio_events": hooks.bio_events.iter().map(|(t, e)| format!("{t:.0} {e:?}")).collect::<Vec<_>>(),
+            // Row 7.7: the same events as data, and the configured molt
+            // interval, for `scene/scene/plots.py molt_hist`.
+            "events": hooks.bio_events.iter().map(|&(t, e)| {
+                let (kind, c) = crate::bt_hooks::describe(e);
+                serde_json::json!({"t": t, "kind": kind, "tray": c.tray, "r": c.r, "c": c.c})
+            }).collect::<Vec<_>>(),
+            "lifecycle": {
+                "seed": args.seed,
+                "interval_mean": rookery_core::LifecycleParams::default().interval_mean(),
+                "interval_sigma": rookery_core::LifecycleParams::default().interval_sigma(),
+            },
             "max_box_displacement": box_moved,
             "shells": hooks.shells.as_ref().map(|m| m.checks.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>()),
         });
