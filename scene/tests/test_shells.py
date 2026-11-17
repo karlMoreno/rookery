@@ -22,8 +22,10 @@ def bid(m, n):
     return i
 
 
-def place(m, d, body, pos):
-    """What Sim::set_body_pose does: write the free joint, stop it, forward."""
+def place(m, d, body, pos, gravity=True):
+    """What the shell mover does: Sim::set_gravcomp (gravity on in a box, off
+    when parked), then Sim::set_body_pose (write the free joint, stop it, forward)."""
+    m.body_gravcomp[bid(m, body)] = 0.0 if gravity else 1.0
     j = m.body_jntadr[bid(m, body)]
     q, v = m.jnt_qposadr[j], m.jnt_dofadr[j]
     d.qpos[q:q + 7] = [*pos, 1, 0, 0, 0]
@@ -74,9 +76,35 @@ def test_a_parked_shell_moves_into_its_box_and_back():
         moved = abs(d.xpos[bid(m, n)] - p0).max()
         assert moved < 0.002, f"{n} moved {moved} when the shell arrived"
 
-    place(m, d, "shell_1_2", s.shell_parked(1, 2))
+    place(m, d, "shell_1_2", s.shell_parked(1, 2), gravity=False)
     run(m, d, 1.0)
     assert d.xpos[bid(m, "shell_1_2")] == pytest.approx(s.shell_parked(1, 2), abs=1e-3)
+
+
+def shell_contacts(m, d):
+    shells = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, f"shell_{r}_{c}_body") for r in range(4) for c in range(4)}
+    return sum(1 for i in range(d.ncon) if d.contact[i].geom1 in shells or d.contact[i].geom2 in shells)
+
+
+def test_parked_shells_hover_and_touch_nothing():
+    m, d = load()
+    run(m, d, 0.5)
+    assert shell_contacts(m, d) == 0
+    place(m, d, "shell_0_3", SceneSpec().shell_in_box(0, 3))
+    run(m, d, 0.5)
+    assert shell_contacts(m, d) >= 1, "a shell in a box rests on its floor"
+    place(m, d, "shell_0_3", SceneSpec().shell_parked(0, 3), gravity=False)
+    run(m, d, 0.5)
+    assert shell_contacts(m, d) == 0
+
+
+def test_a_shell_whose_gravity_is_left_on_lands_on_the_pad():
+    s = SceneSpec()
+    m, d = load(s)
+    m.body_gravcomp[bid(m, "shell_2_1")] = 0.0
+    run(m, d, 1.0)
+    p = d.xpos[bid(m, "shell_2_1")]
+    assert p[2] == pytest.approx(s.shell_park_z + s.shell_radius, abs=1e-3), "caught by the pad"
 
 
 def test_a_shell_in_a_box_weighs_on_the_box_not_the_crawfish():

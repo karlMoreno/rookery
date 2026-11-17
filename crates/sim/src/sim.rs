@@ -39,6 +39,7 @@
 //!   │ + timestep(&self) -> f64            │──▶ reads opt.timestep
 //!   │ + qpos(&self) -> Vec<f64>           │──▶ copies qpos
 //!   │ + set_body_pose(&mut self, name, …) │──▶ writes one free joint, mj_forward
+//!   │ + set_gravcomp(&mut self, name, g)  │──▶ writes body_gravcomp (model)
 //!   │ ~ drop: mj_deleteData, mj_deleteModel
 //!   └─────────────────────────────────────┘
 //! ```
@@ -284,6 +285,43 @@ impl Sim {
         // SAFETY: invariants 1 and 2 (non-null, paired). `&mut self` is
         // exclusive, and mj_forward only writes `data`.
         unsafe { ffi::mj_forward(self.model, self.data) };
+        Ok(())
+    }
+
+    /// Set how much of the body called `name`'s weight is cancelled:
+    /// `body_gravcomp`, 0 for normal gravity and 1 to float. Row 7.5: a parked
+    /// shell floats so it touches nothing, and gets its weight back when the
+    /// shell mover puts it in a box. Takes effect from the next step.
+    ///
+    /// This is the one place `Sim` writes the model rather than the data.
+    /// MuJoCo reads `body_gravcomp` on every step, but only computes gravity
+    /// compensation at all when the model was *compiled* with some body
+    /// using it (`ngravcomp > 0`): changing that count at runtime is not
+    /// enough (found writing this). Rookery's scene always has some (the
+    /// crane, the parked shells), and a model without any is refused.
+    ///
+    /// # Errors
+    /// [`SimError::UnknownBody`] for a name the model lacks,
+    /// [`SimError::BadGravcomp`] for a non-finite value, and
+    /// [`SimError::NoGravcomp`] for a model compiled without gravity
+    /// compensation. Nothing changes then.
+    pub fn set_gravcomp(&mut self, name: &str, gravcomp: f64) -> Result<(), SimError> {
+        if !gravcomp.is_finite() {
+            return Err(SimError::BadGravcomp(gravcomp));
+        }
+        let id = self
+            .body_index(name)
+            .ok_or_else(|| SimError::UnknownBody(name.to_owned()))?;
+        // SAFETY: invariant 1, so `model` is non-null and valid. Reading one
+        // field does not mutate it.
+        if unsafe { (*self.model).ngravcomp } == 0 {
+            return Err(SimError::NoGravcomp);
+        }
+        // SAFETY: invariants 1 and 3. `model` is non-null and valid, and
+        // `&mut self` makes this the only access to it. `body_gravcomp` holds
+        // `nbody` mjtNums and `id < nbody`, because `body_index` searched
+        // `body_names`, which has exactly `nbody` entries (set at load).
+        unsafe { *(*self.model).body_gravcomp.add(id) = gravcomp };
         Ok(())
     }
 
@@ -606,6 +644,36 @@ mod tests {
             z,
             "errors change nothing"
         );
+    }
+
+    #[test]
+    fn set_gravcomp_floats_a_body_and_gives_its_weight_back() {
+        let mut sim = load_str(
+            "gravcomp",
+            r#"<mujoco><option timestep="0.001"/><worldbody>
+                 <body name="a" pos="0 0 .5"><freejoint/><geom type="sphere" size=".02"/></body>
+                 <body name="crane" pos="1 0 .5" gravcomp="1"><freejoint/><geom type="sphere" size=".02"/></body>
+               </worldbody></mujoco>"#,
+        );
+        let z = |sim: &Sim| sim.qpos()[2];
+        sim.set_gravcomp("a", 1.0).expect("a exists");
+        for _ in 0..1_000 {
+            sim.step();
+        }
+        assert!((z(&sim) - 0.5).abs() < 1e-9, "floats: z = {}", z(&sim));
+        sim.set_gravcomp("a", 0.0).expect("a exists");
+        for _ in 0..100 {
+            sim.step();
+        }
+        assert!(z(&sim) < 0.5 - 0.04, "falls again: z = {}", z(&sim)); // ½ g (0.1 s)² ≈ 0.049
+        assert!(matches!(
+            sim.set_gravcomp("nope", 1.0),
+            Err(SimError::UnknownBody(_))
+        ));
+        assert!(matches!(
+            sim.set_gravcomp("a", f64::NAN),
+            Err(SimError::BadGravcomp(_))
+        ));
     }
 
     #[test]

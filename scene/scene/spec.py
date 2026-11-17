@@ -49,6 +49,8 @@ EPS = 1e-9
 BOX_WALL_FOR_SPEC = 0.003
 #: Box floor thickness, mirrored from builder.BOX_FLOOR for the shell's rest height.
 BOX_FLOOR_FOR_SPEC = 0.004
+#: Gap between a parked shell and its pad (row 7.5): parked shells hover.
+SHELL_HOVER = 0.002
 #: The ground plane's height, mirrored from builder (-TRAY_WALL).
 GROUND_Z = -0.01
 
@@ -241,9 +243,12 @@ class SceneSpec:
         return (x, y + self.shell_offset_y, BOX_FLOOR_FOR_SPEC + self.shell_radius)
 
     def shell_parked(self, r: int, c: int) -> tuple[float, float, float]:
-        """Where shell ``(r, c)`` rests when parked: on the pad, under its cell."""
+        """Where shell ``(r, c)`` waits when parked: under its cell, hovering
+        ``SHELL_HOVER`` above the pad. A parked shell has its gravity
+        compensated (row 7.5), so it touches nothing and costs the contact
+        solver nothing. The pad only catches a shell whose gravity is on."""
         x, y = self.cell_center(r, c)
-        return (x, y, self.shell_park_z + self.shell_radius)
+        return (x, y, self.shell_park_z + self.shell_radius + SHELL_HOVER)
 
     def cell_center(self, r: int, c: int) -> tuple[float, float]:
         """(x, y) of cell ``(r, c)``, counted from 0, with the grid centred on the origin."""

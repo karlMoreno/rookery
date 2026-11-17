@@ -63,6 +63,13 @@ pub enum SimError {
     /// [`Sim::set_body_pose`] named a body that is not on a single free joint.
     #[error("body `{0}` has no free joint of its own, so it cannot be placed")]
     NotFree(String),
+    /// A gravity-compensation value that is not a finite number.
+    #[error("gravcomp {0} is not a finite number")]
+    BadGravcomp(f64),
+    /// The model was compiled with no gravity-compensated body, so MuJoCo
+    /// skips gravity compensation entirely and a new value would do nothing.
+    #[error("the model has no gravcomp body, so gravity compensation is off")]
+    NoGravcomp,
     /// A quaternion with zero (or non-finite) length, which names no rotation.
     #[error("quaternion {0:?} has no direction")]
     BadQuat([f64; 4]),
