@@ -1,7 +1,7 @@
 //! `bt`: behavior-tree engine, typed Blackboard and the `mlua` bridge.
 //!
-//! Row 4.1 declares this surface over `todo!()`. Rows 4.2 (composites), 4.3
-//! (Blackboard) and 4.4 (Lua bridge) fill it in without changing a
+//! Row 4.1 declared this surface. Row 4.2 added the composites
+//! ([`nodes`]), 4.3 the Blackboard, and 4.4 (Lua bridge) fills in the rest without changing a
 //! signature. The Phase 4 gates (`tests/gates/tests/phase4_*.rs`) are
 //! written against [`Tree`], [`Blackboard`] and [`BbSchema`].
 //!
@@ -49,7 +49,7 @@
 
 pub mod nodes;
 
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -104,11 +104,62 @@ impl<T> BbKey<T> {
     }
 }
 
+/// One blackboard entry: its name, its declared type and its value, if set.
+struct Entry {
+    name: String,
+    type_id: TypeId,
+    type_name: &'static str,
+    value: Option<Box<dyn Any + Send>>,
+}
+
+/// Why a by-name blackboard access failed. Lua sees these as named errors (4.4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BbError {
+    /// No key has this name.
+    UnknownKey { key: String },
+    /// The key holds a different type than the caller asked for.
+    WrongType {
+        key: String,
+        expected: &'static str,
+        found: &'static str,
+    },
+}
+
+impl std::fmt::Display for BbError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownKey { key } => write!(f, "blackboard has no key `{key}`"),
+            Self::WrongType {
+                key,
+                expected,
+                found,
+            } => {
+                write!(f, "blackboard key `{key}` holds {found}, not {expected}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BbError {}
+
 /// The Rust-owned store that trees read and write (pattern: **Typed
-/// Blackboard**). Row 4.3 implements it.
+/// Blackboard**).
+///
+/// Entries live in a `Vec` indexed by [`KeyId`], each tagged with the
+/// `TypeId` it was registered with. A [`BbKey<T>`] can only be made by
+/// [`Blackboard::register`], so typed access through a key is checked at
+/// compile time. A wrong type does not compile (see `tests/ui`). Access by
+/// name, which is how Lua reaches entries, is checked at run time and fails
+/// with a named [`BbError`].
+///
+/// ```text
+///   register::<T>("name") ──▶ KeyId(i) ──▶ entries[i] = { name, TypeId::of::<T>(), value }
+///   get(&BbKey<T>)        ──▶ entries[i].value.downcast_ref::<T>()   (cannot mismatch)
+///   get_named::<T>("name")──▶ TypeId check ──▶ Ok(&T) | Err(WrongType { key, expected, found })
+/// ```
 #[derive(Default)]
 pub struct Blackboard {
-    entries: Vec<(String, Box<dyn Any + Send>)>,
+    entries: Vec<Entry>,
 }
 
 impl std::fmt::Debug for Blackboard {
@@ -116,7 +167,11 @@ impl std::fmt::Debug for Blackboard {
         f.debug_struct("Blackboard")
             .field(
                 "keys",
-                &self.entries.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+                &self
+                    .entries
+                    .iter()
+                    .map(|e| (&e.name, e.type_name))
+                    .collect::<Vec<_>>(),
             )
             .finish()
     }
@@ -128,21 +183,88 @@ impl Blackboard {
     }
 
     /// Register an entry called `name` holding a `T`, and return its key.
+    /// Registering the same name and type again returns the same key.
+    ///
+    /// # Panics
+    /// If `name` is already registered with a different type. That is a bug
+    /// in the schema, found at startup, never at tick time. Use
+    /// [`Blackboard::try_register`] to get an error instead.
     pub fn register<T: Any + Send>(&mut self, name: &str) -> BbKey<T> {
-        let _ = (name, &self.entries);
-        todo!("row 4.3: store the name and TypeId, return the key")
+        match self.try_register(name) {
+            Ok(key) => key,
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    /// Like [`Blackboard::register`], but a type conflict is an error.
+    pub fn try_register<T: Any + Send>(&mut self, name: &str) -> Result<BbKey<T>, BbError> {
+        let want = TypeId::of::<T>();
+        if let Some(i) = self.entries.iter().position(|e| e.name == name) {
+            let e = &self.entries[i];
+            if e.type_id != want {
+                return Err(BbError::WrongType {
+                    key: name.to_string(),
+                    expected: std::any::type_name::<T>(),
+                    found: e.type_name,
+                });
+            }
+            return Ok(Self::key(i));
+        }
+        self.entries.push(Entry {
+            name: name.to_string(),
+            type_id: want,
+            type_name: std::any::type_name::<T>(),
+            value: None,
+        });
+        Ok(Self::key(self.entries.len() - 1))
+    }
+
+    fn key<T>(i: usize) -> BbKey<T> {
+        BbKey {
+            id: KeyId(u32::try_from(i).expect("fewer than 2^32 blackboard keys")),
+            _type: PhantomData,
+        }
+    }
+
+    fn entry(&self, id: KeyId) -> Option<&Entry> {
+        self.entries.get(id.0 as usize)
     }
 
     /// The value at `key`, if it has been set.
     pub fn get<T: Any + Send>(&self, key: &BbKey<T>) -> Option<&T> {
-        let _ = key;
-        todo!("row 4.3: look up and downcast")
+        self.entry(key.id)?.value.as_ref()?.downcast_ref::<T>()
     }
 
     /// Set the value at `key`.
     pub fn set<T: Any + Send>(&mut self, key: &BbKey<T>, value: T) {
-        let _ = (key, value);
-        todo!("row 4.3: store the value")
+        if let Some(e) = self.entries.get_mut(key.id.0 as usize) {
+            e.value = Some(Box::new(value));
+        }
+    }
+
+    /// The value of the entry called `name`, read as a `T`. Lua access goes
+    /// through this, so a wrong type is a named error, not a panic.
+    pub fn get_named<T: Any + Send>(&self, name: &str) -> Result<Option<&T>, BbError> {
+        let e = self
+            .entries
+            .iter()
+            .find(|e| e.name == name)
+            .ok_or_else(|| BbError::UnknownKey {
+                key: name.to_string(),
+            })?;
+        if e.type_id != TypeId::of::<T>() {
+            return Err(BbError::WrongType {
+                key: name.to_string(),
+                expected: std::any::type_name::<T>(),
+                found: e.type_name,
+            });
+        }
+        Ok(e.value.as_ref().and_then(|v| v.downcast_ref::<T>()))
+    }
+
+    /// The registered key names, in registration order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.entries.iter().map(|e| e.name.as_str())
     }
 }
 
@@ -166,11 +288,43 @@ pub struct BbSchema {
 }
 
 impl BbSchema {
-    /// Register every schema key on `bb`.
+    /// Register every schema key on `bb`. `gantry_goal` starts as `None`
+    /// (no goal) and `route_len` as 0, so a tree always reads a value.
     pub fn register(bb: &mut Blackboard) -> Self {
-        let _ = bb;
-        todo!("row 4.3: register the schema keys")
+        let schema = Self {
+            sim_time: bb.register("sim_time"),
+            gantry_q: bb.register("gantry_q"),
+            gantry_target: bb.register("gantry_target"),
+            route_len: bb.register("route_len"),
+            gantry_goal: bb.register("gantry_goal"),
+        };
+        bb.set(&schema.gantry_goal, None);
+        bb.set(&schema.route_len, 0);
+        schema
     }
+
+    /// Fill every snapshot key from `snap`. The Integrator calls this once
+    /// per tick, before the tree ticks (4.5). It never touches `gantry_goal`.
+    pub fn write_snapshot(&self, bb: &mut Blackboard, snap: &GantrySnapshot) {
+        bb.set(&self.sim_time, snap.sim_time);
+        bb.set(&self.gantry_q, snap.gantry_q);
+        bb.set(&self.gantry_target, snap.gantry_target);
+        bb.set(&self.route_len, snap.route_len);
+    }
+}
+
+/// What Rust knows about the crane at the start of a tick, as plain values,
+/// so `bt` needs no dependency on `sim`. The Integrator builds it from the
+/// sim snapshot and the route queue.
+///
+/// Per-box poses (`box_pose(name)` in v5) are left out until a leaf needs
+/// them: Phase 4's patrol only reads the crane.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct GantrySnapshot {
+    pub sim_time: f64,
+    pub gantry_q: [f64; 4],
+    pub gantry_target: [f64; 4],
+    pub route_len: usize,
 }
 
 /// A leaf's failure, kept for the run log and the Phase 4 gate.
