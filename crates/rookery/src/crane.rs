@@ -42,17 +42,28 @@ struct CraneIds {
     hook: usize,
 }
 
+/// A queued command: a logged single-axis move, or any other command
+/// (a macro such as `Transfer`) with a label for the event log.
+// Used by the tests now, and by Pose::Transfer goals in row 6.5.
+#[cfg_attr(not(test), allow(dead_code))]
+enum Queued {
+    Move(MoveCommand),
+    Other(Box<dyn Command>, String),
+}
+
 /// Plays commands on the crane and logs every tick.
 pub struct Crane<W: Write> {
     state: GantryState,
-    queue: VecDeque<MoveCommand>,
-    current: Option<MoveCommand>,
+    queue: VecDeque<Queued>,
+    current: Option<Box<dyn Command>>,
     dt: f64,
     rail_line_x: f64,
     ids: CraneIds,
     ticks: u64,
     /// How many commands have started.
     pub started: usize,
+    /// Notable events by tick: macros starting, faults (row 6.4).
+    pub events: Vec<(u64, String)>,
     /// Commands as they started (rule 6).
     pub log: CommandLog,
     qpos_out: W,
@@ -92,21 +103,52 @@ impl<W: Write> Crane<W> {
             ids,
             ticks: 0,
             started: 0,
+            events: Vec::new(),
             log: CommandLog::default(),
             qpos_out,
             io_error: None,
         })
     }
 
-    /// Append commands to the queue.
+    /// Append single-axis moves to the queue. Each is logged when it starts.
     pub fn enqueue(&mut self, cmds: impl IntoIterator<Item = MoveCommand>) {
-        self.queue.extend(cmds);
+        self.queue.extend(cmds.into_iter().map(Queued::Move));
+    }
+
+    /// Append any command, such as a whole `Transfer` macro (row 6.4).
+    /// `label` goes into `events` when it starts.
+    // Used by the tests now, and by Pose::Transfer goals in row 6.5.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn enqueue_command(&mut self, cmd: Box<dyn Command>, label: impl Into<String>) {
+        self.queue.push_back(Queued::Other(cmd, label.into()));
+    }
+
+    /// Fault (row 6.4): replace the active command with its `undo()` and
+    /// drop everything queued behind it. For a macro, the undo reverses its
+    /// completed steps and the one in progress, so the crane puts back what
+    /// it was carrying. Returns false when nothing was active.
+    pub fn abort_active(&mut self) -> bool {
+        let Some(cmd) = self.current.take() else {
+            return false;
+        };
+        self.current = Some(cmd.undo());
+        self.queue.clear();
+        self.events.push((
+            self.ticks,
+            "fault: active command replaced by its undo".into(),
+        ));
+        true
     }
 
     /// Drop the queued commands. The one in progress finishes, so the hook
     /// is never left halfway along a route step.
     pub fn clear_queue(&mut self) {
         self.queue.clear();
+    }
+
+    /// Command ticks so far.
+    pub fn ticks(&self) -> u64 {
+        self.ticks
     }
 
     /// Commands left, the current one included.
@@ -170,8 +212,13 @@ impl<W: Write> Crane<W> {
         self.log_qpos(sim);
         if self.current.is_none() {
             match self.queue.pop_front() {
-                Some(cmd) => {
+                Some(Queued::Move(cmd)) => {
                     self.log.push(self.ticks, cmd.clone());
+                    self.started += 1;
+                    self.current = Some(Box::new(cmd));
+                }
+                Some(Queued::Other(cmd, label)) => {
+                    self.events.push((self.ticks, format!("start: {label}")));
                     self.started += 1;
                     self.current = Some(cmd);
                 }

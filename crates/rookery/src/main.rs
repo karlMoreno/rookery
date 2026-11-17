@@ -190,6 +190,7 @@ mod tests {
             seconds: 60.0,
             scenario: None,
             ticks: None,
+            fault_at: None,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -302,6 +303,62 @@ mod tests {
     }
 
     #[test]
+    fn a_fault_mid_transfer_puts_the_box_back_in_its_cell() {
+        // Row 6.4: the crane player runs a whole Transfer macro, and
+        // abort_active() swaps it for its undo halfway through the carry.
+        let mut r = bt_runner(
+            "fault",
+            r#"return Leaf("idle.lua")"#,
+            &[("idle.lua", r#"function tick(bb) return "running" end"#)],
+        );
+        let meta = mast::SceneMeta::load(cli("scene/generated/rookery.json")).unwrap();
+        let b = r.sim().body_index("box_1_2").unwrap();
+        r.run(20); // xpos is filled by the first step
+        let start = r.sim().snapshot().bodies[b].pos;
+        let t = mast::Transfer::build(mast::home(), 1, 2, &meta).unwrap();
+        r.hooks_mut()
+            .crane_mut()
+            .enqueue_command(Box::new(t), "transfer (1, 2)");
+        // Run until the box has been lifted well clear, then fault.
+        let mut lifted = false;
+        for _ in 0..3_000 {
+            r.run(20);
+            let z = r.sim().snapshot().bodies[b].pos[2];
+            if z > meta.water_depth + 0.02 {
+                lifted = true;
+                break;
+            }
+        }
+        assert!(lifted, "the box was never lifted");
+        r.run(20 * 50); // 1 s more, so the carry is under way
+        assert!(
+            r.hooks_mut().crane_mut().abort_active(),
+            "a command was active"
+        );
+        for _ in 0..3_000 {
+            r.run(20);
+            if r.hooks().crane().route_len() == 0 {
+                break;
+            }
+        }
+        r.run(20 * 50); // settle
+        let p = r.sim().snapshot().bodies[b].pos;
+        let off = ((p[0] - start[0]).powi(2) + (p[1] - start[1]).powi(2)).sqrt();
+        assert!(
+            off < 0.005 && (p[2] - start[2]).abs() < 0.005,
+            "box {off:.4} m from its cell, z {:.4}",
+            p[2]
+        );
+        assert!(
+            r.hooks()
+                .crane()
+                .events
+                .iter()
+                .any(|(_, e)| e.starts_with("fault"))
+        );
+    }
+
+    #[test]
     fn missing_scene_is_an_error_not_a_panic() {
         assert!(run(&cli("no/such.xml")).is_err());
     }
@@ -345,6 +402,10 @@ mod tour_cmd {
         /// 50 Hz ticks to run (overrides --seconds and the scenario's ticks)
         #[arg(long)]
         pub ticks: Option<u64>,
+        /// Inject a fault on this command tick: the active command is replaced
+        /// by its undo (row 6.4)
+        #[arg(long)]
+        pub fault_at: Option<u64>,
         /// Directory for run logs: <log>/<run id>/{qpos.csv, commands.json, summary.json}
         #[arg(long, default_value = "runs")]
         pub log: PathBuf,
@@ -392,7 +453,8 @@ mod tour_cmd {
             targets: start,
             windows: shelf_windows(&meta),
         };
-        let hooks = ScriptHooks::new(&sim, state, cmds, &meta, dt, qpos)?;
+        let mut hooks = ScriptHooks::new(&sim, state, cmds, &meta, dt, qpos)?;
+        hooks.fault_at = args.fault_at;
         let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
         let mut runner = Runner::new(sim, hooks, every_nz);
 
@@ -528,7 +590,8 @@ mod tour_cmd {
             targets: kinematics::home(),
             windows: shelf_windows(&meta),
         };
-        let hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?;
+        let mut hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?;
+        hooks.fault_at = args.fault_at;
         let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
         let first_qpos = sim.qpos();
         let mut runner = Runner::new(sim, hooks, every_nz);
