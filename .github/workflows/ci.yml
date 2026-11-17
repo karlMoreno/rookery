@@ -111,4 +111,6 @@ jobs:
         # -c: the args live outside scene/, so pytest would not find scene's
         # pyproject (python_files for phase*_*.py gates, pythonpath) on its own.
         run: uv run pytest ../tests/gates -q -c pyproject.toml || [ $? -eq 5 ]
-      - run: 'echo "headless: pending Phase 4"'
+      - name: Headless scenarios (row 4.7)
+        if: ${{ !cancelled() }}
+        run: scripts/run-scenarios.sh

@@ -21,7 +21,7 @@ use std::io::Write;
 
 use bt::{BbSchema, Blackboard, GantrySnapshot, Status, Tree};
 use mast::route::{self, Pose};
-use mast::{GantryState, JointTargets, SceneMeta};
+use mast::{DONE_TOL, GantryState, JointTargets, SceneMeta};
 use sim::Sim;
 
 use crate::crane::{Crane, Step};
@@ -43,6 +43,10 @@ pub struct BtHooks<W: Write> {
     /// Every error so far, oldest first: leaf errors as `leaf: message`,
     /// route and command errors as `route: …` / `move: …`.
     pub errors: Vec<String>,
+    /// Goals the crane arrived at, in order (row 4.7): the route empty and
+    /// every measured joint within DONE_TOL of its target. One entry per goal.
+    pub arrivals: Vec<Pose>,
+    arrived: bool,
 }
 
 impl<W: Write> BtHooks<W> {
@@ -68,6 +72,8 @@ impl<W: Write> BtHooks<W> {
             tree_ticks: 0,
             last_status: None,
             errors: Vec::new(),
+            arrivals: Vec::new(),
+            arrived: false,
         })
     }
 
@@ -111,6 +117,7 @@ impl<W: Write> Hooks for BtHooks<W> {
         let goal = self.bb.get(&self.schema.gantry_goal).copied().flatten();
         if goal != self.last_goal {
             self.last_goal = goal;
+            self.arrived = false;
             self.crane.clear_queue();
             self.pending = goal;
         }
@@ -126,6 +133,20 @@ impl<W: Write> Hooks for BtHooks<W> {
 
         if let Step::Failed(reason) = self.crane.tick(sim) {
             self.errors.push(format!("move: {reason}"));
+        }
+
+        // Arrival: the goal's route is done and the joints have settled.
+        if let Some(pose) = self.last_goal
+            && !self.arrived
+            && self.pending.is_none()
+            && self.crane.route_len() == 0
+        {
+            let q = self.crane.observe(sim).q;
+            let t = self.crane.targets().0;
+            if q.iter().zip(t).all(|(a, b)| (a - b).abs() <= DONE_TOL) {
+                self.arrived = true;
+                self.arrivals.push(pose);
+            }
         }
     }
 }

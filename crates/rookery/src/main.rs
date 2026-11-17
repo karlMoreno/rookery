@@ -21,6 +21,7 @@
 mod bt_hooks;
 mod crane;
 mod runner;
+mod scenario;
 mod script;
 mod tour;
 
@@ -164,6 +165,8 @@ mod tests {
             script: Some(script),
             tree: None,
             seconds: 60.0,
+            scenario: None,
+            ticks: None,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -296,14 +299,20 @@ mod tour_cmd {
     #[derive(Debug, clap::Args)]
     pub struct RunArgs {
         /// Tour script (RON), e.g. examples/tour.ron
-        #[arg(long, conflicts_with = "tree", required_unless_present = "tree")]
+        #[arg(long, conflicts_with_all = ["tree", "scenario"], required_unless_present_any = ["tree", "scenario"])]
         pub script: Option<PathBuf>,
         /// Behavior tree (Lua), e.g. lua/trees/patrol.lua (row 4.5)
         #[arg(long)]
         pub tree: Option<PathBuf>,
-        /// With --tree: sim time to run, seconds
+        /// With --tree: sim time to run, seconds (--ticks or the scenario wins)
         #[arg(long, default_value_t = 60.0)]
         pub seconds: f64,
+        /// Scenario (Lua): names a tree and ticks, and checks the run (row 4.7)
+        #[arg(long)]
+        pub scenario: Option<PathBuf>,
+        /// 50 Hz ticks to run (overrides --seconds and the scenario's ticks)
+        #[arg(long)]
+        pub ticks: Option<u64>,
         /// Directory for run logs: <log>/<run id>/{qpos.csv, commands.json, summary.json}
         #[arg(long, default_value = "runs")]
         pub log: PathBuf,
@@ -444,8 +453,20 @@ mod tour_cmd {
     pub fn tree_run(args: &RunArgs) -> Result<String, String> {
         use crate::bt_hooks::BtHooks;
 
-        let tree_path = args.tree.as_ref().ok_or("give --script or --tree")?;
+        let scenario = match &args.scenario {
+            Some(p) => Some(crate::scenario::Scenario::load(p)?),
+            None => None,
+        };
+        let tree_owned = args
+            .tree
+            .clone()
+            .or_else(|| scenario.as_ref().and_then(|s| s.tree.clone()))
+            .ok_or("give --script, --tree, or a --scenario that names a tree")?;
+        let tree_path = &tree_owned;
         let meta = SceneMeta::load(args.scene.with_extension("json")).map_err(|e| e.to_string())?;
+        if let Some(s) = &scenario {
+            s.setup(meta.rows, meta.cols)?;
+        }
         let lua = mlua::Lua::new();
         let tree = bt::Tree::load(tree_path, &lua).map_err(|e| e.to_string())?;
 
@@ -477,9 +498,15 @@ mod tour_cmd {
         };
         let hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?;
         let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
+        let first_qpos = sim.qpos();
         let mut runner = Runner::new(sim, hooks, every_nz);
-        let steps = (args.seconds.clamp(0.0, MAX_SECONDS) / dt_phys).round() as usize;
+        let ticks = args
+            .ticks
+            .or_else(|| scenario.as_ref().and_then(|s| s.ticks));
+        let seconds = ticks.map_or(args.seconds, |t| t as f64 * dt);
+        let steps = (seconds.clamp(0.0, MAX_SECONDS) / dt_phys).round() as usize;
         runner.run(steps);
+        let box_moved = crate::scenario::max_box_displacement(&first_qpos, &runner.sim().qpos());
 
         let hooks = runner.hooks();
         if let Some(e) = hooks.crane().io_error() {
@@ -501,6 +528,8 @@ mod tour_cmd {
             "goal": format!("{:?}", hooks.goal()),
             "final_targets": hooks.targets().0,
             "errors": hooks.errors,
+            "arrivals": hooks.arrivals.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>(),
+            "max_box_displacement": box_moved,
         });
         fs::write(
             dir.join("summary.json"),
@@ -517,6 +546,32 @@ mod tour_cmd {
             hooks.errors.len(),
             dir.display()
         );
+        if let Some(s) = &scenario {
+            let log = crate::scenario::RunLog {
+                ticks: hooks.tree_ticks,
+                sim_time: t,
+                visited: hooks.arrivals.clone(),
+                errors: hooks.errors.clone(),
+                max_box_displacement: box_moved,
+                final_q: hooks.crane().observe(runner.sim()).q,
+            };
+            let (ok, msg) = s.check(&log)?;
+            let verdict = format!(
+                "scenario {}{}: {} — {msg}\n",
+                args.scenario
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+                if s.ci { " (ci)" } else { "" },
+                if ok { "PASS" } else { "FAIL" }
+            );
+            fs::write(dir.join("scenario.txt"), &verdict).map_err(|e| e.to_string())?;
+            return if ok {
+                Ok(report + &verdict)
+            } else {
+                Err(report + &verdict)
+            };
+        }
         if hooks.errors.is_empty() {
             Ok(report)
         } else {
