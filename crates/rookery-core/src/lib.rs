@@ -25,6 +25,9 @@
 //! [`CellObs`], so it never needs `sim`, and `mast` never depends on it
 //! (a CI check since Phase 3).
 
+mod bio;
+pub use bio::{BioParams, CellBio};
+
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rand_distr::{Distribution, LogNormal};
