@@ -76,6 +76,12 @@ pub struct BtHooks<W: Write> {
 /// the chance to ask for something first.
 pub const IDLE_TICKS_BEFORE_FF: u32 = 25;
 
+/// A transferred box counts as lifted out of its cell (`BoxLifted`, row
+/// 8.2) once its floor is this far above the tray floor, metres. The hook
+/// lifts a box about 15 cm to carry it, and a box at rest sits within a
+/// millimetre of 0.
+pub const LIFTED_Z: f64 = 0.02;
+
 impl<W: Write> BtHooks<W> {
     pub fn new(
         sim: &Sim,
@@ -292,6 +298,24 @@ impl<W: Write> Hooks for BtHooks<W> {
         };
         if let Step::Failed(reason) = step {
             self.errors.push(format!("move: {reason}"));
+        }
+
+        // Row 8.2: the box of a Transfer goal has left its cell, so the
+        // animal is harvested. The world publishes BoxLifted once.
+        if let Some(Pose::Transfer(r, c)) = self.last_goal
+            && let Some(world) = self.world.as_mut()
+        {
+            let z = sim.qpos().get(7 * (r * self.meta.cols + c) + 2).copied();
+            let cell = CellId {
+                tray: 0,
+                r: r as u8,
+                c: c as u8,
+            };
+            if z.is_some_and(|z| z > LIFTED_Z)
+                && let Some(e) = world.harvest(cell)
+            {
+                self.record(vec![e]);
+            }
         }
 
         // Arrival: the goal's route is done and the joints have settled.

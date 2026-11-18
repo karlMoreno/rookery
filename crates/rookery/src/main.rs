@@ -437,6 +437,21 @@ mod tests {
             "bio {} vs sim {sim_t}",
             r.hooks().bio_time()
         );
+        // Row 8.2: once the box leaves its cell, the world hears BoxLifted, once.
+        r.run(20 * 750); // 15 s more: lifted and carried
+        let lifted = r
+            .hooks()
+            .bio_events
+            .iter()
+            .filter(|(_, e)| {
+                *e == rookery_core::Event::BoxLifted(rookery_core::CellId {
+                    tray: 0,
+                    r: 1,
+                    c: 2,
+                })
+            })
+            .count();
+        assert_eq!(lifted, 1, "{:?}", r.hooks().bio_events);
     }
 
     /// A throwaway BtHooks, only to swap the real one out of a Runner.
