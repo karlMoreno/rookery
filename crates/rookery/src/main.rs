@@ -203,6 +203,7 @@ mod tests {
             ticks: None,
             fault_at: None,
             seed: 7,
+            max_physics: 900.0,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -386,6 +387,7 @@ mod tests {
             ticks: None,
             fault_at: None,
             seed: 7,
+            max_physics: 900.0,
         };
         tour_cmd::run(&args).expect("the run");
         let run = dir.join("r");
@@ -428,6 +430,7 @@ mod tests {
             ticks: None,
             fault_at: None,
             seed: 7,
+            max_physics: 900.0,
         };
         let t0 = std::time::Instant::now();
         tour_cmd::run(&args).expect("week runs");
@@ -614,6 +617,10 @@ mod tour_cmd {
         /// Seed for the animals' lifecycles (row 7.2)
         #[arg(long, default_value_t = 7)]
         pub seed: u64,
+        /// Most physics time a --tree run may simulate, seconds (row 8.7):
+        /// about 30 s per transfer, so 900 s covers a sim-month of molts
+        #[arg(long, default_value_t = 900.0)]
+        pub max_physics: f64,
         /// 50 Hz ticks to run (overrides --seconds and the scenario's ticks)
         #[arg(long)]
         pub ticks: Option<u64>,
@@ -837,7 +844,7 @@ mod tour_cmd {
         // biology jumps to the next stage change, then one physics tick lets
         // the tree react. The Runner decides, never Lua.
         let bio_end = seconds.clamp(0.0, MAX_BIO_SECONDS);
-        let max_phys_steps = (MAX_SECONDS / dt_phys) as usize;
+        let max_phys_steps = (args.max_physics.max(0.0) / dt_phys) as usize;
         let mut phys_steps = 0usize;
         while runner.hooks().bio_time() < bio_end - 1e-9 && phys_steps < max_phys_steps {
             let left = bio_end - runner.hooks().bio_time();

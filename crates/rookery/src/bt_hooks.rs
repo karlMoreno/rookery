@@ -82,6 +82,22 @@ pub struct BtHooks<W: Write> {
     pub blocks: Vec<Block>,
     pending_ff: f64,
     block_targets: [f64; 4],
+    /// Takes harvested boxes off the exit tray and frees their slots (8.7).
+    worker: crate::exit_worker::ExitWorker,
+    /// Cells whose box the worker found resting in its exit slot when it
+    /// came to clear it: delivered, even though the tray is empty later.
+    pub delivered: Vec<CellId>,
+}
+
+/// Whether `cell`'s box rests in exit slot `slot` (rows 8.4, 8.7): its
+/// floor's centre within 2 cm of the slot, horizontally, and within 1 cm of
+/// the tray top. Boxes come first in qpos, row-major.
+pub fn box_in_slot(qpos: &[f64], meta: &SceneMeta, cell: CellId, slot: usize) -> bool {
+    let i = 7 * (usize::from(cell.r) * meta.cols + usize::from(cell.c));
+    let (Some(b), Some(p)) = (qpos.get(i..i + 3), meta.derived.exit_slots.get(slot)) else {
+        return false;
+    };
+    (b[0] - p[0]).hypot(b[1] - p[1]) < 0.02 && (b[2] - p[2]).abs() < 0.01
 }
 
 /// One block of physics as `targets.csv` records it (row 8.6).
@@ -159,6 +175,8 @@ impl<W: Write> BtHooks<W> {
             blocks: Vec::new(),
             pending_ff: 0.0,
             block_targets: start_targets,
+            worker: Default::default(),
+            delivered: Vec::new(),
         })
     }
 
@@ -172,6 +190,7 @@ impl<W: Write> BtHooks<W> {
     /// Log events at the current biological time and hand them to the tree
     /// through the `events` key (row 7.5).
     fn record(&mut self, events: Vec<Event>) {
+        self.worker.note(&events, self.bio_time);
         for e in events {
             self.event_seq += 1;
             let (kind, cell) = describe(e);
@@ -266,6 +285,7 @@ pub fn describe(e: Event) -> (&'static str, CellId) {
         Event::ShellEaten(c) => ("ShellEaten", c),
         Event::BoxLifted(c) => ("BoxLifted", c),
         Event::WindowMissed(c) => ("WindowMissed", c),
+        Event::Harvested(c) => ("Harvested", c),
     }
 }
 
@@ -301,6 +321,27 @@ impl<W: Write> Hooks for BtHooks<W> {
         if let Some(mover) = self.shells.as_mut() {
             let errors = mover.apply(sim, self.bio_time);
             self.errors.extend(errors);
+        }
+        // Row 8.7: the worker clears boxes harvested 2 h ago and frees their
+        // slots, before the tree plans the next transfer.
+        if let Some(world) = self.world.as_mut() {
+            let q = sim.qpos();
+            for c in self.worker.due_now(self.bio_time) {
+                if let Some(&(_, i)) = self.slot_of.iter().rev().find(|(sc, _)| *sc == c)
+                    && box_in_slot(&q, &self.meta, c, i)
+                {
+                    self.delivered.push(c);
+                }
+            }
+            let cleared = self.worker.apply(sim, world, self.bio_time);
+            for e in &cleared {
+                if let (Event::Harvested(c), Some(a)) = (e, self.slots.as_mut())
+                    && let Some(&(_, i)) = self.slot_of.iter().rev().find(|(sc, _)| sc == c)
+                {
+                    a.free(i);
+                }
+            }
+            self.record(cleared);
         }
         let obs = self.crane.observe(sim);
         let snap = GantrySnapshot {
