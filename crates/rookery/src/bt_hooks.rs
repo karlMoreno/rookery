@@ -77,6 +77,34 @@ pub struct BtHooks<W: Write> {
     slots: Option<mast::SlotAllocator>,
     /// Which exit slot each transferred cell's box went to, in order.
     pub slot_of: Vec<(CellId, usize)>,
+    /// Every 20 ms block of physics so far (row 8.6): the fast-forward jump
+    /// before it and the targets held through it. A replay needs nothing else.
+    pub blocks: Vec<Block>,
+    pending_ff: f64,
+    block_targets: [f64; 4],
+}
+
+/// One block of physics as `targets.csv` records it (row 8.6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Block {
+    /// Biological seconds fast-forwarded just before the block (0 if none).
+    pub ff: f64,
+    /// Actuator targets held for the whole block (rail_y, mast_z, arm_x, hook_lift).
+    pub targets: [f64; 4],
+}
+
+/// Harvest every cell whose box has risen above [`LIFTED_Z`] (row 8.2) and
+/// return the `BoxLifted` events, once per cell. Shared by the live run
+/// and the replay, so both decide the same way. Boxes come first in qpos,
+/// in the world's (row-major) cell order.
+pub fn harvest_lifted(world: &mut World, qpos: &[f64]) -> Vec<Event> {
+    let cells: Vec<CellId> = world.animals().iter().map(|(c, _)| *c).collect();
+    cells
+        .into_iter()
+        .enumerate()
+        .filter(|&(i, _)| qpos.get(7 * i + 2).is_some_and(|z| *z > LIFTED_Z))
+        .filter_map(|(_, c)| world.harvest(c))
+        .collect()
 }
 
 /// Ticks the crane must sit idle before the clock may fast-forward (0.5 s at
@@ -99,6 +127,7 @@ impl<W: Write> BtHooks<W> {
         dt: f64,
         qpos_out: W,
     ) -> Result<Self, String> {
+        let start_targets = state.targets.0;
         let crane = Crane::new(sim, state, &meta, dt, qpos_out)?;
         let n_slots = meta.derived.exit_slots.len();
         let mut bb = Blackboard::new();
@@ -127,6 +156,9 @@ impl<W: Write> BtHooks<W> {
             detector: DetectorKind::default().build(),
             slots: (n_slots > 0).then(|| mast::SlotAllocator::new(n_slots)),
             slot_of: Vec::new(),
+            blocks: Vec::new(),
+            pending_ff: 0.0,
+            block_targets: start_targets,
         })
     }
 
@@ -196,6 +228,7 @@ impl<W: Write> BtHooks<W> {
         }
         let events = world.step(dt);
         self.bio_time += dt;
+        self.pending_ff += dt;
         // The shell mover's inbox has these too; it acts on the next tick,
         // which the clock always runs right after a jump.
         self.record(events);
@@ -360,23 +393,19 @@ impl<W: Write> Hooks for BtHooks<W> {
             self.errors.push(format!("move: {reason}"));
         }
 
-        // Row 8.2: the box of a Transfer goal has left its cell, so the
-        // animal is harvested. The world publishes BoxLifted once.
-        if let Some(Pose::Transfer(r, c)) = self.last_goal
-            && let Some(world) = self.world.as_mut()
-        {
-            let z = sim.qpos().get(7 * (r * self.meta.cols + c) + 2).copied();
-            let cell = CellId {
-                tray: 0,
-                r: r as u8,
-                c: c as u8,
-            };
-            if z.is_some_and(|z| z > LIFTED_Z)
-                && let Some(e) = world.harvest(cell)
-            {
-                self.record(vec![e]);
-            }
+        // Row 8.2: a box has left its cell, so its animal is harvested. The
+        // world publishes BoxLifted once. Any box counts, not only the
+        // goal's, so a replay (8.6), which has no goals, decides the same.
+        if let Some(world) = self.world.as_mut() {
+            let lifted = harvest_lifted(world, &sim.qpos());
+            self.record(lifted);
         }
+        // Row 8.6: the block of physics that just ran, for targets.csv.
+        self.blocks.push(Block {
+            ff: std::mem::take(&mut self.pending_ff),
+            targets: self.block_targets,
+        });
+        self.block_targets = self.crane.targets().0;
 
         // Arrival: the goal's route is done and the joints have settled.
         if let Some(pose) = self.last_goal

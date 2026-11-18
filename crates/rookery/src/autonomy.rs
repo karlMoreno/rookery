@@ -178,6 +178,10 @@ pub fn run(args: &AutonomyArgs) -> Result<AutonomyReport, String> {
             serde_json::to_string_pretty(&summary).unwrap_or_default() + "\n",
         )
         .map_err(|e| e.to_string())?;
+        // Row 8.6: replayable with `rookery replay <dir>`.
+        let run_meta =
+            crate::replay::RunMeta::new(args.seed, &args.scene, &args.tree, every, dt_phys)?;
+        crate::replay::write_log(dir, &run_meta, &hooks.blocks)?;
     }
     Ok(report)
 }
