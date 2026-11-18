@@ -122,7 +122,9 @@ impl Transfer {
         // the bottom shelf the box passes over the exit tray's plate, whose
         // top is level with a just-lifted box's underside (row 10.5).
         let exit_reach_z = route::window_top(exit.0[Axis::MastZ.index()], meta)
-            .map_or(exit.0[Axis::MastZ.index()], |hi| (hi - route::WINDOW_EPS).max(exit.0[Axis::MastZ.index()]));
+            .map_or(exit.0[Axis::MastZ.index()], |hi| {
+                (hi - route::WINDOW_EPS).max(exit.0[Axis::MastZ.index()])
+            });
         let lifted = at.0[Axis::MastZ.index()];
         let clear = route::window_top(lifted, meta)
             .map_or(lifted, |hi| (hi - route::WINDOW_EPS).max(lifted));
