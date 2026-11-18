@@ -34,6 +34,7 @@ pub mod lift;
 pub mod limits;
 pub mod route;
 pub mod transfer;
+pub mod windows;
 
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +42,7 @@ pub use kinematics::{SceneMeta, cell_pose, exit_pose, exit_slot_pose, home};
 pub use lift::{LIFT_HEIGHT, LiftSequence, MacroCommand};
 pub use limits::ShelfWindows;
 pub use transfer::{SlotAllocator, Transfer};
+pub use windows::WindowError;
 
 /// The crane's four prismatic joints, in the order used by every `[f64; 4]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
