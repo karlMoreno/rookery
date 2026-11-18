@@ -811,7 +811,7 @@ mod tour_cmd {
 
         let state = GantryState {
             targets: kinematics::home(),
-            windows: shelf_windows(&meta),
+            windows: mast::ShelfWindows::from_meta(&meta).map_err(|e| e.to_string())?,
         };
         let cells: Vec<rookery_core::CellId> = (0..meta.rows * meta.cols)
             .map(|i| rookery_core::CellId {

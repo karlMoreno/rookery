@@ -17,7 +17,7 @@ use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use mast::kinematics::{self, shelf_windows};
+use mast::kinematics;
 use mast::{GantryState, SceneMeta};
 use rookery_core::{CellId, Event, LifecycleParams, World};
 use sim::Sim;
@@ -104,9 +104,12 @@ pub fn run(args: &AutonomyArgs) -> Result<AutonomyReport, String> {
         .collect();
     let mut world = World::new(LifecycleParams::default(), args.seed, &cells);
     let mover = ShellMover::subscribe(&sim, &meta_path, &meta, &mut world)?;
+    // Row 10.3: the windows come from the scene and are checked at start-up.
+    let windows = mast::ShelfWindows::from_meta(&meta)
+        .map_err(|e| format!("{}: {e}", meta_path.display()))?;
     let state = GantryState {
         targets: kinematics::home(),
-        windows: shelf_windows(&meta),
+        windows,
     };
     let hooks = BtHooks::new(&sim, tree, state, meta.clone(), dt, qpos)?
         .with_world(world)

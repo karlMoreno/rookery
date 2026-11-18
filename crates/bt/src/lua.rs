@@ -50,8 +50,8 @@ function Repeat(n, child) return { kind = "Repeat", n = n, child = child } end
 function Leaf(path, ...) return { kind = "Leaf", path = path, args = table.pack(...) } end
 function Home() return { pose = "Home" } end
 function Exit() return { pose = "Exit" } end
-function Cell(r, c) return { pose = "Cell", r = r, c = c } end
-function Transfer(r, c) return { pose = "Transfer", r = r, c = c } end
+function Cell(r, c, t) return { pose = "Cell", r = r, c = c, t = t } end
+function Transfer(r, c, t) return { pose = "Transfer", r = r, c = c, t = t } end
 function ExitSlot(i) return { pose = "ExitSlot", i = i } end
 "#;
 
@@ -399,6 +399,19 @@ fn pose_to_lua(lua: &Lua, p: Option<Pose>) -> mlua::Result<Value> {
             t.set("r", r)?;
             t.set("c", c)?;
         }
+        // Phase 10: a cell on another tray carries `t`.
+        Pose::CellOn(tr, r, c) => {
+            t.set("pose", "Cell")?;
+            t.set("r", r)?;
+            t.set("c", c)?;
+            t.set("t", tr)?;
+        }
+        Pose::TransferOn(tr, r, c) => {
+            t.set("pose", "Transfer")?;
+            t.set("r", r)?;
+            t.set("c", c)?;
+            t.set("t", tr)?;
+        }
     }
     Ok(Value::Table(t))
 }
@@ -431,10 +444,21 @@ fn pose_from_lua(v: &Value) -> Result<Pose, String> {
                 usize::try_from(n).map_err(|_| format!("{kind} {k} must be ≥ 0, got {n}"))
             };
             let (r, c) = (idx("r")?, idx("c")?);
-            Ok(if kind == "Cell" {
-                Pose::Cell(r, c)
-            } else {
-                Pose::Transfer(r, c)
+            // Phase 10: an optional tray, 0 when left out.
+            let tray = match t
+                .get::<Option<i64>>("t")
+                .map_err(|_| format!("{kind} t must be an integer"))?
+            {
+                None => 0,
+                Some(n) => {
+                    usize::try_from(n).map_err(|_| format!("{kind} t must be ≥ 0, got {n}"))?
+                }
+            };
+            Ok(match (kind.as_str(), tray) {
+                ("Cell", 0) => Pose::Cell(r, c),
+                ("Cell", tr) => Pose::CellOn(tr, r, c),
+                (_, 0) => Pose::Transfer(r, c),
+                (_, tr) => Pose::TransferOn(tr, r, c),
             })
         }
         other => Err(format!("bb:go_to: unknown pose `{other}`")),

@@ -64,6 +64,73 @@ impl Transfer {
         Self::build_to(from, r, c, None, meta)
     }
 
+    /// The transfer of the box in cell (`r`, `c`) of tray `t` (Phase 10)
+    /// into exit slot `slot`. On one tray it is [`Transfer::build_to`]. On a
+    /// rack every move stays inside a shelf window:
+    ///
+    /// ```text
+    ///   route → CellOn(t, r, c)        mast to the shelf's engage height, rail, reach in
+    ///   LiftSequence                   hook +2 cm, mast +8 cm: still under the shelf above
+    ///   arm in (carry speed)           the box slides out over its tray's front wall
+    ///   mast → the exit's engage height, rail → the slot's Y   (arm retracted, in the aisle)
+    ///   arm out over the slot, hook down: the box is set down
+    ///   route → Home
+    /// ```
+    ///
+    /// # Errors
+    /// [`RouteError::NoSuchTray`], [`RouteError::NoSuchCell`] or
+    /// [`RouteError::NoSuchSlot`].
+    pub fn build_on(
+        from: JointTargets,
+        t: usize,
+        r: usize,
+        c: usize,
+        slot: Option<usize>,
+        meta: &SceneMeta,
+    ) -> Result<MacroCommand, RouteError> {
+        if !meta.is_rack() {
+            if t != 0 {
+                return Err(RouteError::NoSuchTray {
+                    tray: t,
+                    trays: meta.trays,
+                });
+            }
+            return Self::build_to(from, r, c, slot, meta);
+        }
+        let mut steps: Vec<Box<dyn Command>> = Vec::new();
+        let mut at = from;
+        let push =
+            |steps: &mut Vec<Box<dyn Command>>, cmds: Vec<MoveCommand>, at: &mut JointTargets| {
+                *at = route::end_of(*at, &cmds);
+                steps.extend(cmds.into_iter().map(|c| Box::new(c) as Box<dyn Command>));
+            };
+        let engage = route::route(at, Pose::CellOn(t, r, c), meta)?;
+        push(&mut steps, engage, &mut at);
+        let engaged = at;
+        let lift = LiftSequence::build(engaged, LIFT_HEIGHT);
+        at.0[Axis::HookLift.index()] += crate::Hook::engage_dz(&crate::PassiveHook);
+        at.0[Axis::MastZ.index()] += LIFT_HEIGHT;
+        steps.push(Box::new(lift));
+        let exit = match slot {
+            None => kinematics::exit_pose(meta),
+            Some(i) => kinematics::exit_slot_pose(i, meta).ok_or(RouteError::NoSuchSlot {
+                slot: i,
+                slots: meta.derived.exit_slots.len(),
+            })?,
+        };
+        let carry = vec![
+            MoveCommand::new(Axis::ArmX, 0.0).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::RailY, exit.0[Axis::RailY.index()]).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::ArmX, exit.0[Axis::ArmX.index()]).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::HookLift, 0.0).with_speed(crate::lift::ENGAGE_SPEED),
+        ];
+        push(&mut steps, carry, &mut at);
+        let home = route::route(at, Pose::Home, meta)?;
+        push(&mut steps, home, &mut at);
+        Ok(MacroCommand::new(steps))
+    }
+
     /// The same transfer into exit slot `slot` (row 8.4), or onto the middle
     /// of the exit tray with `None`.
     ///
