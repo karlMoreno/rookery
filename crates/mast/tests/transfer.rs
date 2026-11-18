@@ -192,3 +192,30 @@ fn the_allocator_never_puts_two_boxes_in_one_slot() {
     }
     assert_eq!(a.len(), 6);
 }
+
+#[test]
+fn a_slot_transfer_carries_high_enough_to_clear_boxes_on_the_exit_tray() {
+    // Row 8.5: the hanging box (underside at mast − engage height) must pass
+    // above the handles of boxes already in slots.
+    let m = meta();
+    let z = mast::transfer::loaded_travel_z(&m);
+    let engaged = cell_pose(0, 0, &m).unwrap().0[Axis::MastZ.index()];
+    let underside = z - engaged;
+    let exit_handle_top = m.derived.exit_pose[2] + m.box_size[2] + m.handle_height;
+    assert!(
+        underside >= exit_handle_top + mast::transfer::LOADED_CLEAR - 1e-9,
+        "{underside} vs {exit_handle_top}"
+    );
+    let mut st = GantryState {
+        targets: pre(3, 1),
+        windows: shelf_windows(&m),
+    };
+    let mut t = Transfer::build_to(st.targets, 3, 1, Some(0), &m).unwrap();
+    let (_, trace) = run(&mut t, &mut st, 20_000);
+    // While the arm retracts with the box (hook lifted), the mast is up there.
+    assert!(
+        trace
+            .iter()
+            .any(|q| (q.0[Axis::MastZ.index()] - z).abs() < 1e-9)
+    );
+}

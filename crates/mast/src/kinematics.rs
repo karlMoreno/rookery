@@ -121,7 +121,7 @@ impl SceneMeta {
     /// Hook height (finger centreline) that centres the hook's whole
     /// envelope, finger and upturned tip, in the gap between the box top and
     /// the handle's underside, for a box resting at `base_z`.
-    fn engage_z(&self, base_z: f64) -> f64 {
+    pub(crate) fn engage_z(&self, base_z: f64) -> f64 {
         let box_top = base_z + self.box_size[2];
         let handle_bottom = box_top + self.handle_height - HANDLE_DIAMETER;
         let centre = (box_top + handle_bottom) / 2.0;
