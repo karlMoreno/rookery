@@ -338,6 +338,7 @@ dependencies = [
  "mast",
  "mlua",
  "proptest",
+ "rookery",
  "rookery-core",
  "sim",
 ]

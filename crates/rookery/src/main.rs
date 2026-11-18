@@ -18,15 +18,6 @@
 //!   print Report { nbody, bodies, box z? } ◀────────────┘
 //! ```
 
-mod bt_hooks;
-mod crane;
-mod lift_trials;
-mod runner;
-mod scenario;
-mod script;
-mod shells;
-mod tour;
-
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -34,7 +25,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use sim::Sim;
 
-use runner::{NoHooks, Runner};
+use rookery::runner::{NoHooks, Runner};
 
 /// Sim time the Phase 1 demo runs for, in seconds.
 const DURATION_S: f64 = 2.0;
@@ -85,7 +76,7 @@ fn main() -> ExitCode {
                 lift_speed,
             }),
             _,
-        ) => lift_trials::summary(scene, *seeds, *lift_speed)
+        ) => rookery::lift_trials::summary(scene, *seeds, *lift_speed)
             .map(|v| serde_json::to_string(&v).unwrap_or_default() + "\n"),
         (None, Some(scene)) => run(scene).map(|r| r.to_string()),
         (None, None) => Err("give a scene to load, or `rookery run --script <tour.ron>`".into()),
@@ -155,6 +146,7 @@ fn run(scene: &Path) -> Result<Report, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rookery::{bt_hooks, lift_trials};
 
     fn cli(rel: &str) -> PathBuf {
         PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(rel)
@@ -475,9 +467,9 @@ mod tour_cmd {
     use mast::{DONE_TOL, GantryState, SceneMeta};
     use sim::Sim;
 
-    use crate::runner::Runner;
-    use crate::script;
-    use crate::tour::{Outcome, ScriptHooks};
+    use rookery::runner::Runner;
+    use rookery::script;
+    use rookery::tour::{Outcome, ScriptHooks};
 
     /// Commands tick at 50 Hz (every 20 physics steps at 1 ms), the BT rate from Phase 4.
     const TICK_HZ: f64 = 50.0;
@@ -650,10 +642,10 @@ mod tour_cmd {
     /// `rookery run --tree`: tick a behavior tree at 50 Hz for `--seconds`
     /// (row 4.5). Writes the same run log as a tour, plus the tree's errors.
     pub fn tree_run(args: &RunArgs) -> Result<String, String> {
-        use crate::bt_hooks::BtHooks;
+        use rookery::bt_hooks::BtHooks;
 
         let scenario = match &args.scenario {
-            Some(p) => Some(crate::scenario::Scenario::load(p)?),
+            Some(p) => Some(rookery::scenario::Scenario::load(p)?),
             None => None,
         };
         let tree_owned = args
@@ -705,7 +697,7 @@ mod tour_cmd {
             .collect();
         let mut world =
             rookery_core::World::new(rookery_core::LifecycleParams::default(), args.seed, &cells);
-        let mover = crate::shells::ShellMover::subscribe(
+        let mover = rookery::shells::ShellMover::subscribe(
             &sim,
             &args.scene.with_extension("json"),
             &meta,
@@ -738,7 +730,7 @@ mod tour_cmd {
             phys_steps += every;
         }
         // Boxes and crawfish: shells move by design (row 7.5).
-        let box_moved = crate::scenario::max_box_displacement(
+        let box_moved = rookery::scenario::max_box_displacement(
             &first_qpos,
             &runner.sim().qpos(),
             2 * hooks_meta_rows * hooks_meta_cols,
@@ -770,7 +762,7 @@ mod tour_cmd {
             // Row 7.7: the same events as data, and the configured molt
             // interval, for `scene/scene/plots.py molt_hist`.
             "events": hooks.bio_events.iter().map(|&(t, e)| {
-                let (kind, c) = crate::bt_hooks::describe(e);
+                let (kind, c) = rookery::bt_hooks::describe(e);
                 serde_json::json!({"t": t, "kind": kind, "tray": c.tray, "r": c.r, "c": c.c})
             }).collect::<Vec<_>>(),
             "lifecycle": {
@@ -797,14 +789,14 @@ mod tour_cmd {
             dir.display()
         );
         if let Some(s) = &scenario {
-            let log = crate::scenario::RunLog {
+            let log = rookery::scenario::RunLog {
                 ticks: hooks.tree_ticks,
                 sim_time: t,
                 visited: hooks.arrivals.clone(),
                 errors: hooks.errors.clone(),
                 max_box_displacement: box_moved,
                 final_q: hooks.crane().observe(runner.sim()).q,
-                moved_boxes: crate::scenario::moved_boxes(
+                moved_boxes: rookery::scenario::moved_boxes(
                     &first_qpos,
                     &runner.sim().qpos(),
                     hooks_meta_rows,
@@ -814,7 +806,7 @@ mod tour_cmd {
                     .bio_events
                     .iter()
                     .map(|&(t, e)| {
-                        let (kind, cell) = crate::bt_hooks::describe(e);
+                        let (kind, cell) = rookery::bt_hooks::describe(e);
                         (t, kind, cell)
                     })
                     .collect(),
