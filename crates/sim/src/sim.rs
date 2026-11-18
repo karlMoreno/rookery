@@ -40,6 +40,8 @@
 //!   │ + qpos(&self) -> Vec<f64>           │──▶ copies qpos
 //!   │ + set_body_pose(&mut self, name, …) │──▶ writes one free joint, mj_forward
 //!   │ + set_gravcomp(&mut self, name, g)  │──▶ writes body_gravcomp (model)
+//!   │ + ray(&self, from, dir, skip)       │──▶ mj_ray, past the skipped geoms
+//!   │ + geom_names(&self)                 │──▶ reads names (no FFI after load)
 //!   │ ~ drop: mj_deleteData, mj_deleteModel
 //!   └─────────────────────────────────────┘
 //! ```
@@ -405,6 +407,87 @@ impl Sim {
         Ok(())
     }
 
+    /// Cast a ray from `from` along `dir` and return the distance to the
+    /// first geom it hits and that geom's index, or `None` if it hits
+    /// nothing. Geoms in `skip` are seen through: the ray goes on from just
+    /// past them (row 11.2: the camera looks through the water and the box's
+    /// handle). Geom group 3, the hidden shell pad, is never hit. Uses the
+    /// positions of the last forward pass, so call it after `step`.
+    ///
+    /// Row 11.2's depth images are built from these, one ray per pixel: no
+    /// OpenGL context, so it runs the same on the Air and in CI.
+    pub fn ray(&self, from: [f64; 3], dir: [f64; 3], skip: &[usize]) -> Option<(f64, usize)> {
+        let n = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
+        if !(n.is_finite() && n > 0.0) || from.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        let d = [dir[0] / n, dir[1] / n, dir[2] / n];
+        // Groups 0-5; 3 is the hidden shell pad (scene/scene/builder.py).
+        let groups: [u8; 6] = [1, 1, 1, 0, 1, 1];
+        let (mut p, mut travelled) = (from, 0.0);
+        for _ in 0..16 {
+            let mut geom: c_int = -1;
+            let mut normal = [0.0f64; 3];
+            // SAFETY: invariants 1 and 2. `model` and `data` are non-null and
+            // paired, and `&self` means nothing writes `data` meanwhile;
+            // mj_ray only reads them. `p` and `d` are 3 mjtNums each,
+            // `groups` is mjNGROUP (6) bytes, and `geom` and `normal` are
+            // valid outputs of 1 int and 3 mjtNums for the call's duration.
+            let dist = unsafe {
+                ffi::mj_ray(
+                    self.model,
+                    self.data,
+                    p.as_ptr(),
+                    d.as_ptr(),
+                    groups.as_ptr(),
+                    true,
+                    -1,
+                    &mut geom,
+                    normal.as_mut_ptr(),
+                )
+            };
+            let Ok(g) = usize::try_from(geom) else {
+                return None;
+            };
+            if dist.is_nan() || dist < 0.0 {
+                return None;
+            }
+            travelled += dist;
+            if !skip.contains(&g) {
+                return Some((travelled, g));
+            }
+            // Through it: go on from just past the hit.
+            let step = dist + 1e-6;
+            p = [p[0] + d[0] * step, p[1] + d[1] * step, p[2] + d[2] * step];
+            travelled += 1e-6;
+        }
+        None
+    }
+
+    /// Every geom's name, by index (`""` for an unnamed geom).
+    pub fn geom_names(&self) -> Vec<String> {
+        // SAFETY: invariant 1, so `model` is non-null and valid.
+        let ngeom = usize::try_from(unsafe { (*self.model).ngeom }).unwrap_or(0);
+        (0..ngeom)
+            .map(|id| {
+                let Ok(id) = c_int::try_from(id) else {
+                    return String::new();
+                };
+                // SAFETY: as in `read_body_name`: `id < ngeom`, `mjOBJ_GEOM` is
+                // a valid object type, and the returned string (or null) lives
+                // in `model`'s name buffer; it is copied out before returning.
+                unsafe {
+                    let name = ffi::mj_id2name(self.model, ffi::mjtObj_mjOBJ_GEOM as c_int, id);
+                    if name.is_null() {
+                        String::new()
+                    } else {
+                        CStr::from_ptr(name).to_string_lossy().into_owned()
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Index of the body called `name` in [`Snapshot::bodies`] (equal to its
     /// MuJoCo body id), or `None` if the model has no such body.
     pub fn body_index(&self, name: &str) -> Option<usize> {
@@ -674,6 +757,42 @@ mod tests {
             sim.set_gravcomp("a", f64::NAN),
             Err(SimError::BadGravcomp(_))
         ));
+    }
+
+    #[test]
+    fn a_ray_hits_the_first_geom_and_sees_through_the_skipped_ones() {
+        let mut sim = load_str(
+            "ray",
+            r#"<mujoco><worldbody>
+                 <geom name="floor" type="plane" size="1 1 .1"/>
+                 <geom name="glass" type="box" size=".2 .2 .01" pos="0 0 .5" contype="0" conaffinity="0"/>
+                 <geom name="pad" type="box" size=".2 .2 .01" pos="0 0 .3" group="3"/>
+               </worldbody></mujoco>"#,
+        );
+        sim.step();
+        let names = sim.geom_names();
+        let id = |n: &str| names.iter().position(|x| x == n).unwrap();
+        let (d, g) = sim
+            .ray([0.0, 0.0, 1.0], [0.0, 0.0, -2.0], &[])
+            .expect("hits");
+        assert_eq!(g, id("glass"));
+        assert!((d - 0.49).abs() < 1e-9, "{d}");
+        // Through the glass; the group-3 pad is never hit; the floor at z = 0.
+        let (d, g) = sim
+            .ray([0.0, 0.0, 1.0], [0.0, 0.0, -1.0], &[id("glass")])
+            .expect("hits");
+        assert_eq!(g, id("floor"));
+        assert!((d - 1.0).abs() < 1e-5, "{d}");
+        assert_eq!(
+            sim.ray([0.0, 0.0, 1.0], [0.0, 0.0, 1.0], &[]),
+            None,
+            "nothing above"
+        );
+        assert_eq!(
+            sim.ray([0.0, 0.0, 1.0], [0.0; 3], &[]),
+            None,
+            "no direction"
+        );
     }
 
     #[test]
