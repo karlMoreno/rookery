@@ -16,10 +16,11 @@
 //! Red on `main` from row 8.1. Green once 8.2–8.5 land.
 //!
 //! Phase 10 (row 10.1): `TRAYS=3` runs the same gate on the three-shelf
-//! rack (`scene/generated/rack3.xml`, 48 cells) with two seeds, because a
-//! rack week has about 12 molts per seed and CI time is finite. Unset or
-//! `TRAYS=1` is the Phase 8 gate exactly as it was. Red at `TRAYS=3` until
-//! 10.2–10.5 land.
+//! rack (`scene/generated/rack3.xml`). The rack's trays are one box deep
+//! (12 cells, decided in #53: under a shelf a box can't be lifted over the
+//! handles of the boxes in front of it), so it runs the four seeds for two
+//! weeks each (about 20 molts). Unset or `TRAYS=1` is the Phase 8 gate
+//! exactly as it was. Red at `TRAYS=3` until 10.3–10.5 land.
 
 use std::path::PathBuf;
 
@@ -42,39 +43,47 @@ fn repo(rel: &str) -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(rel)
 }
 
-/// The rack's seeds and the molts they must reach between them (row 10.1).
-const RACK_SEEDS: [u64; 2] = [7, 11];
-const RACK_MIN_MOLTS: usize = 12;
+/// The rack runs two weeks per seed and must reach this many molts in all
+/// (the four seeds give 20 there, counted with rookery-core alone).
+const RACK_WEEKS: f64 = 2.0;
+const RACK_MIN_MOLTS: usize = 16;
 
-/// What `TRAYS` asks for: the scene, the seeds and the minimum molt count.
-fn config() -> (&'static str, Vec<u64>, usize) {
+/// What `TRAYS` asks for: the scene, the seeds, the minimum molt count and
+/// the counted horizon in seconds.
+fn config() -> (&'static str, Vec<u64>, usize, f64) {
     match std::env::var("TRAYS").as_deref() {
-        Err(_) | Ok("1") => ("scene/generated/rookery.xml", SEEDS.to_vec(), MIN_MOLTS),
+        Err(_) | Ok("1") => (
+            "scene/generated/rookery.xml",
+            SEEDS.to_vec(),
+            MIN_MOLTS,
+            WEEK,
+        ),
         Ok("3") => (
             "scene/generated/rack3.xml",
-            RACK_SEEDS.to_vec(),
+            SEEDS.to_vec(),
             RACK_MIN_MOLTS,
+            RACK_WEEKS * WEEK,
         ),
         Ok(other) => panic!("TRAYS={other}: the gate knows 1 and 3"),
     }
 }
 
-fn week(scene: &str, seed: u64) -> Result<AutonomyReport, String> {
+fn week(scene: &str, seed: u64, horizon: f64) -> Result<AutonomyReport, String> {
     run(&AutonomyArgs {
         scene: repo(scene),
         tree: repo("lua/trees/autonomy.lua"),
         seed,
-        bio_seconds: WEEK + WINDOW_TAIL,
+        bio_seconds: horizon + WINDOW_TAIL,
         log: None,
     })
 }
 
 #[test]
 fn every_molt_in_a_week_is_harvested_inside_its_window() {
-    let (scene, seeds, min_molts) = config();
+    let (scene, seeds, min_molts, horizon) = config();
     let handles: Vec<_> = seeds
         .iter()
-        .map(|&seed| std::thread::spawn(move || (seed, week(scene, seed))))
+        .map(|&seed| std::thread::spawn(move || (seed, week(scene, seed, horizon))))
         .collect();
     let mut molts = 0usize;
     let mut latencies = Vec::new();
@@ -98,7 +107,7 @@ fn every_molt_in_a_week_is_harvested_inside_its_window() {
                 Event::WindowMissed(c) => {
                     problems.push(format!("seed {seed}: window missed at {c:?}, t = {t:.0} s"))
                 }
-                Event::Molted(c) if t <= WEEK => {
+                Event::Molted(c) if t <= horizon => {
                     molts += 1;
                     match lifted_after(&r.events, c, t) {
                         Some(t_lift) => latencies.push(t_lift - t),
