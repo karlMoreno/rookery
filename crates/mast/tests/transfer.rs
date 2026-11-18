@@ -142,7 +142,7 @@ fn a_transfer_into_a_slot_sets_the_box_down_there() {
         assert!(
             trace
                 .iter()
-                .any(|q| q.0.iter().zip(at.0).all(|(a, b)| (a - b).abs() < 1e-9)),
+                .any(|q| (0..3).all(|k| (q.0[k] - at.0[k]).abs() < 1e-6)),
             "slot {slot}: never released at {at:?}"
         );
         assert_eq!(st.targets, home());

@@ -336,8 +336,9 @@
       <freejoint name="shell_3_3_free" />
       <geom name="shell_3_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
     </body>
-    <geom name="exit_tray" type="box" size="0.075000 0.075000 0.005000" pos="-0.395000 0.000000 0.095000" rgba="0.200000 0.600000 0.300000 1.000000" />
-    <geom name="exit_tray_leg" type="cylinder" size="0.015000 0.050000" pos="-0.395000 0.000000 0.040000" rgba="0.200000 0.600000 0.300000 1.000000" />
+    <geom name="exit_tray" type="box" size="0.075000 0.450000 0.005000" pos="-0.395000 0.000000 0.095000" rgba="0.200000 0.600000 0.300000 1.000000" />
+    <geom name="exit_tray_leg" type="cylinder" size="0.015000 0.050000" pos="-0.395000 -0.375000 0.040000" rgba="0.200000 0.600000 0.300000 1.000000" />
+    <geom name="exit_tray_leg_2" type="cylinder" size="0.015000 0.050000" pos="-0.395000 0.375000 0.040000" rgba="0.200000 0.600000 0.300000 1.000000" />
     <geom name="floor_rail" type="box" size="0.020000 0.450000 0.020000" pos="-0.590000 0.000000 0.010000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
     <geom name="guide_rail" type="box" size="0.020000 0.450000 0.020000" pos="-0.590000 0.000000 1.020000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
     <geom name="guide_post_yneg" type="box" size="0.020000 0.020000 0.505000" pos="-0.590000 -0.450000 0.495000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
