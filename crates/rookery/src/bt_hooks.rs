@@ -72,6 +72,11 @@ pub struct BtHooks<W: Write> {
     event_seq: u64,
     /// Decides which cells have molted (row 8.3; pattern: **Strategy**).
     detector: Box<dyn MoltDetector>,
+    /// Exit slots (row 8.4), when the scene has them: a transfer goes into
+    /// the lowest free one.
+    slots: Option<mast::SlotAllocator>,
+    /// Which exit slot each transferred cell's box went to, in order.
+    pub slot_of: Vec<(CellId, usize)>,
 }
 
 /// Ticks the crane must sit idle before the clock may fast-forward (0.5 s at
@@ -95,6 +100,7 @@ impl<W: Write> BtHooks<W> {
         qpos_out: W,
     ) -> Result<Self, String> {
         let crane = Crane::new(sim, state, &meta, dt, qpos_out)?;
+        let n_slots = meta.derived.exit_slots.len();
         let mut bb = Blackboard::new();
         let schema = BbSchema::register(&mut bb);
         Ok(Self {
@@ -119,6 +125,8 @@ impl<W: Write> BtHooks<W> {
             shells: None,
             event_seq: 0,
             detector: DetectorKind::default().build(),
+            slots: (n_slots > 0).then(|| mast::SlotAllocator::new(n_slots)),
+            slot_of: Vec::new(),
         })
     }
 
@@ -290,10 +298,42 @@ impl<W: Write> Hooks for BtHooks<W> {
             if let Pose::Transfer(r, c) = pose {
                 // A job, not a place (row 6.5): one Transfer macro, so a
                 // fault can undo it as a whole.
-                match mast::Transfer::build(self.crane.targets(), r, c, &self.meta) {
-                    Ok(t) => self
-                        .crane
-                        .enqueue_command(Box::new(t), format!("transfer ({r}, {c})")),
+                // Row 8.4: into the lowest free exit slot, when the scene
+                // has slots; onto the middle of the exit tray otherwise.
+                let slot = match self.slots.as_mut() {
+                    None => Ok(None),
+                    Some(a) => a.take().map(Some).ok_or(()),
+                };
+                let built = slot
+                    .map_err(|()| "every exit slot is full".to_string())
+                    .and_then(|slot| {
+                        mast::Transfer::build_to(self.crane.targets(), r, c, slot, &self.meta)
+                            .map(|t| (t, slot))
+                            .map_err(|e| {
+                                if let (Some(a), Some(i)) = (self.slots.as_mut(), slot) {
+                                    a.free(i);
+                                }
+                                e.to_string()
+                            })
+                    });
+                match built {
+                    Ok((t, slot)) => {
+                        if let Some(i) = slot {
+                            self.slot_of.push((
+                                CellId {
+                                    tray: 0,
+                                    r: r as u8,
+                                    c: c as u8,
+                                },
+                                i,
+                            ));
+                        }
+                        let label = match slot {
+                            Some(i) => format!("transfer ({r}, {c}) to exit slot {i}"),
+                            None => format!("transfer ({r}, {c})"),
+                        };
+                        self.crane.enqueue_command(Box::new(t), label);
+                    }
                     Err(e) => self.errors.push(format!("route: goal {pose:?}: {e}")),
                 }
             } else {

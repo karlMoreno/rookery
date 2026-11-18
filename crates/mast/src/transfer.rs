@@ -28,6 +28,24 @@ use crate::{Axis, Command, JointTargets, MoveCommand};
 /// can slide along the saddle in Y, so rail moves at full speed swing the box.
 pub const CARRY_SPEED: f64 = 0.3;
 
+/// Clearance between a carried box's underside and the handles of boxes
+/// already waiting on the exit tray, metres (row 8.5).
+pub const LOADED_CLEAR: f64 = 0.02;
+
+/// Mast height for carrying a box over a full exit tray (row 8.5).
+///
+/// Retracting the arm sweeps the hanging box across the exit tray at the
+/// cell's Y, and with slots another box may already sit there. Its handle
+/// top is `exit z + box height + handle height`. A hanging box's underside
+/// is `mast − engage_z(0)` (the mast height that engages a box resting at
+/// z = 0), so the mast must be at least that plus the clearance. Found in
+/// 8.5: at the plain travel height, carrying box (3, 1) knocked the box in
+/// slot 0 (same Y) off the tray.
+pub fn loaded_travel_z(meta: &SceneMeta) -> f64 {
+    let exit_top = meta.derived.exit_pose[2] + meta.box_size[2] + meta.handle_height;
+    travel_z(meta).max(meta.engage_z(0.0) + exit_top + LOADED_CLEAR)
+}
+
 /// Builds transfers.
 pub struct Transfer;
 
@@ -89,7 +107,13 @@ impl Transfer {
                 slots: meta.derived.exit_slots.len(),
             })?,
         };
-        let travel = travel_z(meta);
+        // With slots, other boxes may wait on the exit tray: carry above them.
+        // Without, the Phase 6 height (the gate's tuning) is unchanged.
+        let travel = if slot.is_some() {
+            loaded_travel_z(meta)
+        } else {
+            travel_z(meta)
+        };
         let carry = vec![
             MoveCommand::new(Axis::MastZ, travel.max(at.0[Axis::MastZ.index()])),
             MoveCommand::new(Axis::ArmX, 0.0).with_speed(CARRY_SPEED),
