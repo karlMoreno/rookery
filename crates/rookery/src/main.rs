@@ -49,7 +49,7 @@ struct Cli {
 enum Cmd {
     /// Play a tour script (--script) or a behavior tree (--tree) on the crane,
     /// logging every tick (Phase 3 and Phase 4 demos).
-    Run(tour_cmd::RunArgs),
+    Run(Box<tour_cmd::RunArgs>),
     /// Replay a logged run from its targets and diff the event log (row 8.6)
     Replay {
         /// The run's log directory, runs/<id>
@@ -205,6 +205,7 @@ mod tests {
             seed: 7,
             max_physics: 900.0,
             config: None,
+            detector: "oracle".into(),
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -390,6 +391,7 @@ mod tests {
             seed: 7,
             max_physics: 900.0,
             config: None,
+            detector: "oracle".into(),
         };
         tour_cmd::run(&args).expect("the run");
         let run = dir.join("r");
@@ -434,6 +436,7 @@ mod tests {
             seed: 7,
             max_physics: 900.0,
             config: None,
+            detector: "oracle".into(),
         };
         let t0 = std::time::Instant::now();
         tour_cmd::run(&args).expect("week runs");
@@ -628,6 +631,9 @@ mod tour_cmd {
         /// about 30 s per transfer, so 900 s covers a sim-month of molts
         #[arg(long, default_value_t = 900.0)]
         pub max_physics: f64,
+        /// Molt detector for --tree runs (Phase 11): oracle or camera
+        #[arg(long, default_value = "oracle")]
+        pub detector: String,
         /// 50 Hz ticks to run (overrides --seconds and the scenario's ticks)
         #[arg(long)]
         pub ticks: Option<u64>,
@@ -655,6 +661,7 @@ mod tour_cmd {
             a.scene = cfg.scene;
             a.seed = cfg.seed;
             a.max_physics = cfg.max_physics;
+            a.detector = cfg.detector;
             return run(&a);
         }
         let Some(script_path) = &args.script else {
@@ -849,7 +856,8 @@ mod tour_cmd {
         )?;
         let mut hooks = BtHooks::new(&sim, tree, state, meta, dt, qpos)?
             .with_world(world)
-            .with_shells(mover);
+            .with_shells(mover)
+            .with_detector(args.detector.parse()?, &sim);
         hooks.fault_at = args.fault_at;
         let every_nz = NonZeroUsize::new(every).unwrap_or(NonZeroUsize::MIN);
         let first_qpos = sim.qpos();
@@ -922,6 +930,19 @@ mod tour_cmd {
             serde_json::to_string_pretty(&summary).unwrap_or_default() + "\n",
         )
         .map_err(|e| e.to_string())?;
+        // Row 11.5: camera against oracle, sample by sample.
+        if args.detector == "camera" {
+            let [both, cam, ora, neither] = hooks.confusion;
+            let json = serde_json::json!({
+                "detector": "camera", "label_source": "oracle",
+                "both": both, "camera_only": cam, "oracle_only": ora, "neither": neither,
+            });
+            fs::write(
+                dir.join("detector.json"),
+                serde_json::to_string_pretty(&json).unwrap_or_default() + "\n",
+            )
+            .map_err(|e| e.to_string())?;
+        }
         // Row 8.6: enough to replay the run without the tree.
         let run_meta =
             rookery::replay::RunMeta::new(args.seed, &args.scene, tree_path, every, dt_phys)?;

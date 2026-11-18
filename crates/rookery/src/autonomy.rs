@@ -84,9 +84,6 @@ pub fn run_with(
     args: &AutonomyArgs,
     detector: rookery_core::DetectorKind,
 ) -> Result<AutonomyReport, String> {
-    if detector == rookery_core::DetectorKind::Camera {
-        todo!("row 11.5: the Integrator builds each cell's CellObs from its depth view");
-    }
     let meta_path = args.scene.with_extension("json");
     let meta = SceneMeta::load(&meta_path).map_err(|e| e.to_string())?;
     let lua = mlua::Lua::new();
@@ -123,7 +120,8 @@ pub fn run_with(
     };
     let hooks = BtHooks::new(&sim, tree, state, meta.clone(), dt, qpos)?
         .with_world(world)
-        .with_shells(mover);
+        .with_shells(mover)
+        .with_detector(detector, &sim);
     let mut runner = Runner::new(
         sim,
         hooks,

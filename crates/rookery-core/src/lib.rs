@@ -26,6 +26,7 @@
 //! (a CI check since Phase 3).
 
 mod bio;
+pub mod vision;
 pub use bio::{BioParams, CellBio};
 
 use rand::{Rng, SeedableRng};
