@@ -6,3 +6,6 @@ runs/*
 scene/.venv
 __pycache__/
 .DS_Store
+
+# MuJoCo writes its warnings here (row 8.5 committed two by mistake)
+MUJOCO_LOG.TXT
