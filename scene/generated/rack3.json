@@ -1,0 +1,85 @@
+{
+  "box_size": [
+    0.12,
+    0.12,
+    0.08
+  ],
+  "cell_pitch": 0.15,
+  "cols": 4,
+  "contact": {
+    "condim": null,
+    "friction": null,
+    "solimp": null,
+    "solref": null
+  },
+  "crawfish": true,
+  "crawfish_length": 0.08,
+  "crawfish_mass": 0.03,
+  "crawfish_radius": 0.012,
+  "derived": {
+    "exit_pose": [
+      -0.395,
+      0.0,
+      0.1
+    ],
+    "exit_slots": [
+      [
+        -0.395,
+        -0.075,
+        0.1
+      ],
+      [
+        -0.395,
+        0.075,
+        0.1
+      ],
+      [
+        -0.395,
+        -0.225,
+        0.1
+      ],
+      [
+        -0.395,
+        0.225,
+        0.1
+      ],
+      [
+        -0.395,
+        -0.375,
+        0.1
+      ],
+      [
+        -0.395,
+        0.375,
+        0.1
+      ]
+    ],
+    "rail_line_x": -0.5900000000000001,
+    "shelf_bases": [
+      0.0,
+      0.285,
+      0.57
+    ]
+  },
+  "exit_slots": null,
+  "exit_tray_pose": null,
+  "guide_rail_height": 1.0,
+  "handle_dia": 0.012,
+  "handle_height": 0.045,
+  "hook_finger": 0.04,
+  "hook_radius": 0.004,
+  "hook_tip_rise": 0.015,
+  "hook_width": 0.03,
+  "preset": null,
+  "rail_x": null,
+  "rows": 4,
+  "shelf_gap": 0.15,
+  "shell_length": 0.06,
+  "shell_mass": 0.005,
+  "shell_offset_y": 0.03,
+  "shell_park_z": -0.3,
+  "shell_radius": 0.008,
+  "shells": true,
+  "trays": 3,
+  "water_depth": 0.05
+}
