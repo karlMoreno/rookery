@@ -418,6 +418,11 @@ class SceneSpec:
                 if 2 * self.crawfish_radius >= self.box_size[2]:
                     p.append("the crawfish is taller than the box walls")
             if self.preset is None and self.trays > 1:
+                if self.rows != 1:
+                    p.append(
+                        f"stacked trays must be one box deep (rows = 1, got {self.rows}): under a shelf the crane "
+                        "can't lift a box over the handles of the boxes in front of it (decided in #53)"
+                    )
                 if self.shelf_gap < MIN_STACKED_SHELF_GAP - EPS:
                     p.append(
                         f"shelf_gap {self.shelf_gap:.3f} is too small for stacked trays: a lifted box needs "
