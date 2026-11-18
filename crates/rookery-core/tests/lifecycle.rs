@@ -47,26 +47,51 @@ fn molted_is_reported_when_premolt_ends_even_inside_one_long_step() {
         next_transition: HOUR,
     };
     // A 3 h step crosses Premolt→Molting (Molted) and maybe Molting→SoftShell.
-    assert!(matches!(
-        a.step(3.0 * HOUR, &p, &mut rng),
-        Some(Event::Molted(_))
-    ));
+    let events = a.step(3.0 * HOUR, &p, &mut rng);
+    assert!(
+        matches!(events.first(), Some(Event::Molted(_))),
+        "{events:?}"
+    );
 }
 
 #[test]
-fn the_window_closing_comes_when_soft_shell_ends() {
+fn the_window_warns_before_it_ends_and_an_animal_left_in_its_box_misses_it() {
+    // Row 8.2: WindowClosing is the warning, `window_warning` (1 h) before
+    // the soft-shell window ends; WindowMissed is the end itself.
     let p = LifecycleParams::default();
     let mut rng = ChaCha8Rng::seed_from_u64(3);
     let mut a = Crawfish {
         stage: MoltStage::SoftShell,
         t_in_stage: 0.0,
-        next_transition: HOUR,
+        next_transition: 6.0 * HOUR,
     };
-    assert!(matches!(
-        a.step(1.5 * HOUR, &p, &mut rng),
-        Some(Event::WindowClosing(_))
-    ));
+    assert!(a.step(4.9 * HOUR, &p, &mut rng).is_empty());
+    assert!(
+        (a.time_to_next(&p) - 0.1 * HOUR).abs() < 1e-6,
+        "the warning is next"
+    );
+    assert_eq!(
+        a.step(0.2 * HOUR, &p, &mut rng),
+        vec![Event::WindowClosing(CellId::NONE)]
+    );
+    assert_eq!(
+        a.step(HOUR, &p, &mut rng),
+        vec![Event::WindowMissed(CellId::NONE)]
+    );
     assert_eq!(a.stage, MoltStage::Hardened);
+    // One long step reports both, in order.
+    let mut b = Crawfish {
+        stage: MoltStage::SoftShell,
+        t_in_stage: 0.0,
+        next_transition: 6.0 * HOUR,
+    };
+    assert_eq!(
+        b.step(7.0 * HOUR, &p, &mut rng)[..2],
+        [
+            Event::WindowClosing(CellId::NONE),
+            Event::WindowMissed(CellId::NONE)
+        ]
+    );
 }
 
 #[test]
@@ -134,6 +159,7 @@ fn fast_forward_and_fine_steps_give_each_cell_the_same_history() {
                 Event::Molted(c) => (c, "molted"),
                 Event::WindowClosing(c) => (c, "window"),
                 Event::ShellEaten(c) => (c, "eaten"),
+                Event::WindowMissed(c) => (c, "missed"),
                 _ => continue,
             };
             m.entry(c).or_default().push(k);
@@ -250,4 +276,68 @@ fn every_cell_has_water_that_stays_in_bounds_for_a_year() {
             "{b:?}"
         );
     }
+}
+
+#[test]
+fn a_harvested_cell_is_lifted_once_and_never_misses_its_window() {
+    use rookery_core::{CellObs, MoltDetector, OracleDetector};
+    let cells = [cell(0), cell(1)];
+    let mut w = World::new(LifecycleParams::default(), 9, &cells);
+    let mut oracle = OracleDetector;
+    let obs = CellObs::default();
+    let (mut lifted, mut events) = (false, Vec::new());
+    let mut t = 0.0;
+    while t < 120.0 * DAY {
+        let dt = w.time_to_next_transition() + 1e-6;
+        let step = w.step(dt);
+        t += dt;
+        for e in &step {
+            if let Event::Molted(c) = e {
+                // Detected from the first step after the molt.
+                assert!(oracle.detect(*c, &obs, &w).is_some(), "{c:?} not detected");
+                if *c == cell(0) && !lifted {
+                    assert_eq!(w.harvest(cell(0)), Some(Event::BoxLifted(cell(0))));
+                    assert_eq!(w.harvest(cell(0)), None, "lifted once");
+                    assert!(oracle.detect(cell(0), &obs, &w).is_none(), "gone");
+                    lifted = true;
+                }
+            }
+        }
+        events.extend(step);
+    }
+    assert!(lifted);
+    let ev = |c: CellId, k: fn(CellId) -> Event| events.iter().filter(|e| **e == k(c)).count();
+    assert_eq!(
+        ev(cell(0), Event::WindowMissed),
+        0,
+        "a harvested animal never misses"
+    );
+    assert_eq!(ev(cell(0), Event::Molted), 1, "and never molts again");
+    assert!(
+        ev(cell(1), Event::WindowMissed) >= 2,
+        "cell 1 is never harvested"
+    );
+    assert_eq!(
+        ev(cell(1), Event::WindowMissed),
+        ev(cell(1), Event::WindowClosing)
+    );
+    assert!(
+        w.bus
+            .log()
+            .iter()
+            .any(|(_, e)| *e == Event::BoxLifted(cell(0)))
+    );
+    assert!(w.window_left(0).is_none() && w.is_harvested(0));
+}
+
+#[test]
+fn detector_kind_parses_oracle_only() {
+    use rookery_core::DetectorKind;
+    assert_eq!("oracle".parse::<DetectorKind>(), Ok(DetectorKind::Oracle));
+    assert!(
+        "camera"
+            .parse::<DetectorKind>()
+            .unwrap_err()
+            .contains("oracle")
+    );
 }

@@ -66,6 +66,10 @@ pub struct LifecycleParams {
     pub hardened_mean: f64,
     /// How long a shed shell lies in the box before the animal eats it.
     pub shell_delay: f64,
+    /// `WindowClosing` comes this long before the soft-shell window ends
+    /// (row 8.2): the warning to harvest now. At the end, an animal still
+    /// in its box gets `WindowMissed`.
+    pub window_warning: f64,
 }
 
 impl Default for LifecycleParams {
@@ -78,6 +82,7 @@ impl Default for LifecycleParams {
             soft_window: 6.0 * HOUR,
             hardened_mean: 2.0 * DAY,
             shell_delay: DAY,
+            window_warning: HOUR,
         }
     }
 }
@@ -178,7 +183,7 @@ impl Event {
 pub enum Event {
     /// The animal left its old shell: a second body appears in the box.
     Molted(CellId),
-    /// The soft-shell window is ending: harvest now or miss it.
+    /// The soft-shell window ends in `window_warning`: harvest now or miss it.
     WindowClosing(CellId),
     /// The animal ate its shed shell.
     ShellEaten(CellId),
@@ -224,35 +229,65 @@ impl Crawfish {
         }
     }
 
-    /// Advance by `bio_dt` seconds. Returns the event of a stage change, if any.
+    /// Advance by `bio_dt` seconds. Returns the events, in the order they
+    /// happened: `Molted` when premolt ends, `WindowClosing` when the
+    /// soft-shell window has `window_warning` left, and `WindowMissed` when
+    /// it ends (row 8.2: a harvested animal is no longer stepped, so an
+    /// animal still being stepped at the end missed it). One step may cross
+    /// several short stages, and every crossing is reported.
     pub fn step(
         &mut self,
         bio_dt: f64,
         params: &LifecycleParams,
         rng: &mut ChaCha8Rng,
-    ) -> Option<Event> {
-        // One step may cross several short stages (molting lasts about an
-        // hour). Each crossing may produce an event; `Molted` wins, because
-        // the molt count is what the farm (and the gate) is built on.
-        self.t_in_stage += bio_dt.max(0.0);
-        let mut event = None;
-        while self.t_in_stage >= self.next_transition {
-            self.t_in_stage -= self.next_transition;
+    ) -> Vec<Event> {
+        let mut left = if bio_dt.is_finite() {
+            bio_dt.max(0.0)
+        } else {
+            0.0
+        };
+        let mut out = Vec::new();
+        loop {
+            let remaining = self.next_transition - self.t_in_stage;
+            let advance = left.min(remaining.max(0.0));
+            if self.stage == MoltStage::SoftShell {
+                let w = params.window_warning;
+                if remaining > w && remaining - advance <= w {
+                    out.push(Event::WindowClosing(CellId::NONE));
+                }
+            }
+            if left < remaining {
+                self.t_in_stage += left;
+                return out;
+            }
+            left -= remaining.max(0.0);
             let from = self.stage;
             self.stage = from.next();
+            self.t_in_stage = 0.0;
             self.next_transition = params.draw(self.stage, rng).max(f64::MIN_POSITIVE);
-            let e = match (from, self.stage) {
-                (MoltStage::Premolt, MoltStage::Molting) => Some(Event::Molted(CellId::NONE)),
+            match (from, self.stage) {
+                (MoltStage::Premolt, MoltStage::Molting) => out.push(Event::Molted(CellId::NONE)),
                 (MoltStage::SoftShell, MoltStage::Hardened) => {
-                    Some(Event::WindowClosing(CellId::NONE))
+                    out.push(Event::WindowMissed(CellId::NONE))
                 }
-                _ => None,
-            };
-            if !matches!(event, Some(Event::Molted(_))) && e.is_some() {
-                event = e;
+                (_, MoltStage::SoftShell) if self.next_transition <= params.window_warning => {
+                    // A window shorter than the warning: warn as it opens.
+                    out.push(Event::WindowClosing(CellId::NONE));
+                }
+                _ => {}
             }
         }
-        event
+    }
+
+    /// Seconds until this animal's next event or stage change: the warning
+    /// point counts inside the soft-shell window.
+    pub fn time_to_next(&self, params: &LifecycleParams) -> f64 {
+        let remaining = (self.next_transition - self.t_in_stage).max(0.0);
+        if self.stage == MoltStage::SoftShell && remaining > params.window_warning {
+            remaining - params.window_warning
+        } else {
+            remaining
+        }
     }
 }
 
@@ -309,6 +344,9 @@ pub struct World {
     animals: Vec<(CellId, Crawfish)>,
     /// Seconds until each cell's shed shell is eaten; `None` with no shell.
     shells: Vec<Option<f64>>,
+    /// Cells whose box the crane has lifted out (row 8.2). Their animal is
+    /// gone: it is no longer stepped and its water has no animal in it.
+    harvested: Vec<bool>,
     bio: Vec<CellBio>,
     pub bus: EventBus,
     steps: Tick,
@@ -336,6 +374,7 @@ impl World {
             bio_params,
             rngs,
             shells: vec![None; cells.len()],
+            harvested: vec![false; cells.len()],
             bio: vec![CellBio::new(&bio_params); cells.len()],
             animals,
             bus: EventBus::default(),
@@ -355,15 +394,20 @@ impl World {
         };
         let mut out = Vec::new();
         let cells = self.animals.iter_mut().zip(self.rngs.iter_mut());
-        for (((cell, animal), rng), (shell, bio)) in
-            cells.zip(self.shells.iter_mut().zip(self.bio.iter_mut()))
+        let state = self.shells.iter_mut().zip(self.bio.iter_mut());
+        for ((((cell, animal), rng), (shell, bio)), &gone) in cells.zip(state).zip(&self.harvested)
         {
+            if gone {
+                // The box left with its animal (and any shell in it).
+                bio.step(dt, 0, &self.bio_params);
+                continue;
+            }
             // An existing shell ages first: one this step's molt sheds
             // starts its clock now.
             if let Some(left) = shell {
                 *left -= dt;
             }
-            if let Some(e) = animal.step(dt, &self.params, rng) {
+            for e in animal.step(dt, &self.params, rng) {
                 if matches!(e, Event::Molted(_)) {
                     // The molt happened part-way through the step: the time
                     // since then is how far into Molting the animal is (or
@@ -404,16 +448,57 @@ impl World {
         self.shells.get(i).is_some_and(Option::is_some)
     }
 
-    /// Seconds until the next stage change of any animal or the next shell
-    /// eaten (rows 7.2 and 7.5). The fast-forward clock jumps exactly this
-    /// far when nothing else is going on.
+    /// Seconds until the next stage change, window warning or shell eaten
+    /// of any animal still in the farm (rows 7.2, 7.5 and 8.2). The
+    /// fast-forward clock jumps exactly this far when nothing else is going on.
     pub fn time_to_next_transition(&self) -> f64 {
-        let stages = self
-            .animals
-            .iter()
-            .map(|(_, a)| (a.next_transition - a.t_in_stage).max(0.0));
-        let shells = self.shells.iter().flatten().map(|left| left.max(0.0));
+        let live = |i: &usize| !self.harvested[*i];
+        let stages = (0..self.animals.len())
+            .filter(live)
+            .map(|i| self.animals[i].1.time_to_next(&self.params));
+        let shells = (0..self.shells.len())
+            .filter(live)
+            .filter_map(|i| self.shells[i].map(|left| left.max(0.0)));
         stages.chain(shells).fold(f64::INFINITY, f64::min)
+    }
+
+    /// Where `cell` is in [`World::animals`].
+    pub fn index(&self, cell: CellId) -> Option<usize> {
+        self.animals.iter().position(|(c, _)| *c == cell)
+    }
+
+    /// The crane lifted `cell`'s box out (row 8.2): the animal is harvested.
+    /// Publishes and returns `BoxLifted(cell)` the first time, `None` after
+    /// that or for a cell the world doesn't have.
+    pub fn harvest(&mut self, cell: CellId) -> Option<Event> {
+        let i = self.index(cell)?;
+        if std::mem::replace(&mut self.harvested[i], true) {
+            return None;
+        }
+        let e = Event::BoxLifted(cell);
+        self.bus.publish(self.steps, e);
+        Some(e)
+    }
+
+    /// Whether the cell at index `i` has been harvested.
+    pub fn is_harvested(&self, i: usize) -> bool {
+        self.harvested.get(i).copied().unwrap_or(false)
+    }
+
+    /// Seconds left in the soft-shell window of the animal at index `i`,
+    /// while it is molting or soft and still in its box; `None` otherwise.
+    /// During `Molting` the soft stage isn't drawn yet, so its mean counts.
+    pub fn window_left(&self, i: usize) -> Option<f64> {
+        if self.is_harvested(i) {
+            return None;
+        }
+        let (_, a) = self.animals.get(i)?;
+        let here = (a.next_transition - a.t_in_stage).max(0.0);
+        match a.stage {
+            MoltStage::Molting => Some(here + self.params.soft_window),
+            MoltStage::SoftShell => Some(here),
+            _ => None,
+        }
     }
 }
 
@@ -438,4 +523,49 @@ pub struct MoltObservation {
 /// **Strategy**). The oracle reads `World`; the Phase 11 camera reads depth.
 pub trait MoltDetector {
     fn detect(&mut self, cell: CellId, obs: &CellObs, world: &World) -> Option<MoltObservation>;
+}
+
+/// The detector that cheats (row 8.2): it reads the animal's stage from
+/// the world. A cell is detected while its animal is molting or soft and
+/// still in its box, with full confidence, from the first tick after
+/// `Molted`. Phase 11's camera detector must match it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OracleDetector;
+
+impl MoltDetector for OracleDetector {
+    fn detect(&mut self, cell: CellId, _obs: &CellObs, world: &World) -> Option<MoltObservation> {
+        let i = world.index(cell)?;
+        world.window_left(i).map(|_| MoltObservation {
+            cell,
+            confidence: 1.0,
+        })
+    }
+}
+
+/// Which detector to build (`detector = "oracle"` in config). Only the
+/// oracle exists until Phase 11.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DetectorKind {
+    #[default]
+    Oracle,
+}
+
+impl DetectorKind {
+    pub fn build(self) -> Box<dyn MoltDetector> {
+        match self {
+            DetectorKind::Oracle => Box::new(OracleDetector),
+        }
+    }
+}
+
+impl std::str::FromStr for DetectorKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "oracle" => Ok(DetectorKind::Oracle),
+            other => Err(format!(
+                "unknown detector `{other}`; the only one is `oracle`"
+            )),
+        }
+    }
 }
