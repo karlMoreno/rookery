@@ -69,13 +69,14 @@ fn the_schema_registers_every_key_with_defaults() {
             "gantry_target",
             "route_len",
             "gantry_goal",
-            "events"
+            "events",
+            "detected"
         ]
     );
     assert_eq!(bb.get(&s.gantry_goal), Some(&None));
     assert!(bb.get(&s.events).is_some_and(|q| q.is_empty()));
     assert_eq!(bb.get(&s.route_len), Some(&0));
-    assert_eq!(SCHEMA_VERSION, 2);
+    assert_eq!(SCHEMA_VERSION, 3);
 }
 
 #[test]

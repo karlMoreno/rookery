@@ -454,6 +454,47 @@ mod tests {
         assert_eq!(lifted, 1, "{:?}", r.hooks().bio_events);
     }
 
+    #[test]
+    fn a_leaf_sees_a_molted_cell_in_bb_detected() {
+        // Row 8.3: after a molt, the next tick's tree reads the cell in
+        // `bb.detected`, with its window's time left. Fast-forward a quiet
+        // farm until the first molt, then tick once.
+        let mut r = bt_runner(
+            "detected",
+            r#"return Leaf("see.lua")"#,
+            &[(
+                "see.lua",
+                r#"function tick(bb)
+                     local d = bb.detected[1]
+                     if d and d.closes_in > 3600 and d.closes_in < 8 * 3600 then return "success" end
+                     return "running"
+                   end"#,
+            )],
+        );
+        let cells: Vec<rookery_core::CellId> = (0..16)
+            .map(|i| rookery_core::CellId {
+                tray: 0,
+                r: i / 4,
+                c: i % 4,
+            })
+            .collect();
+        let world = rookery_core::World::new(rookery_core::LifecycleParams::default(), 7, &cells);
+        let hooks = std::mem::replace(r.hooks_mut(), placeholder_hooks());
+        *r.hooks_mut() = hooks.with_world(world);
+        r.run(20 * 30); // idle long enough to fast-forward
+        while !r
+            .hooks()
+            .bio_events
+            .iter()
+            .any(|(_, e)| matches!(e, rookery_core::Event::Molted(_)))
+        {
+            assert!(r.hooks().bio_time() < 30.0 * 86_400.0, "no molt in 30 days");
+            r.hooks_mut().fast_forward(f64::INFINITY);
+            r.run(20);
+        }
+        assert_eq!(r.hooks().last_status, Some(bt::Status::Success));
+    }
+
     /// A throwaway BtHooks, only to swap the real one out of a Runner.
     fn placeholder_hooks() -> bt_hooks::BtHooks<std::io::Sink> {
         let r = bt_runner(
