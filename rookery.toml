@@ -1,0 +1,7 @@
+# Which farm `rookery run --config rookery.toml` runs (row 10.4). Every
+# field has a default; an empty file is the one-tray farm.
+scene = "scene/generated/rookery.xml"   # or "scene/generated/rack3.xml" for the rack
+seed = 7
+detector = "oracle"
+max_physics = 900.0
+# trays = 1                             # optional: checked against the scene
