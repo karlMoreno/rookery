@@ -183,7 +183,18 @@ impl ShellMover {
                     .and_then(|_| self.box_pose(sim, cell))
                 {
                     Some((p, q)) => {
-                        let pos = add(p, rotate(q, self.in_box));
+                        // Beside the crawfish where it lies now, on whichever
+                        // side has more room: a capsule can roll a centimetre
+                        // or so, and a shell laid against it would read as one
+                        // body to the camera (found in 11.5).
+                        let mut at = self.in_box;
+                        if let Some(c) = self.crawfish_pos(sim, cell) {
+                            let rel = rotate_inv(q, sub(c, p))[1];
+                            let side = if rel > 0.002 { -1.0 } else { 1.0 };
+                            let wall = self.inner_half - self.radius;
+                            at[1] = (rel + side * self.in_box[1]).clamp(-wall, wall);
+                        }
+                        let pos = add(p, rotate(q, at));
                         sim.set_gravcomp(&name, 0.0)
                             .and_then(|()| sim.set_body_pose(&name, pos, q))
                             .map(|()| self.to_check.push((cell, bio_time)))
@@ -203,6 +214,15 @@ impl ShellMover {
             }
         }
         errors
+    }
+
+    /// The crawfish's position, read from its free joint (the second block
+    /// of free joints, after the boxes).
+    fn crawfish_pos(&self, sim: &Sim, cell: CellId) -> Option<[f64; 3]> {
+        let i = 7 * (crate::cells::count(&self.meta) + crate::cells::index(&self.meta, cell));
+        let q = sim.qpos();
+        let b = q.get(i..i + 3)?;
+        Some([b[0], b[1], b[2]])
     }
 
     /// The box's position and orientation, read from its free joint.
@@ -355,6 +375,10 @@ mod tests {
         let h = std::f64::consts::FRAC_1_SQRT_2;
         let b = pos(&sim, "box_0_0");
         sim.set_body_pose("box_0_0", [b[0] + 0.02, b[1], b[2]], [h, 0.0, 0.0, h])
+            .unwrap();
+        // Its crawfish rides along, still in the middle of the box.
+        let cf = pos(&sim, "crawfish_0_0");
+        sim.set_body_pose("crawfish_0_0", [b[0] + 0.02, b[1], cf[2]], [h, 0.0, 0.0, h])
             .unwrap();
         world.bus.publish(
             1,

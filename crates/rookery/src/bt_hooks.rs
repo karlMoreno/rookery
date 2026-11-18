@@ -72,6 +72,13 @@ pub struct BtHooks<W: Write> {
     event_seq: u64,
     /// Decides which cells have molted (row 8.3; pattern: **Strategy**).
     detector: Box<dyn MoltDetector>,
+    /// The camera (Phase 11), when the detector is `Camera`: each cell's
+    /// latest `CellObs`, when a second body was first seen, and the ticks
+    /// since the last sample.
+    camera: Option<CameraState>,
+    /// Camera detections against the oracle's, per sample (row 11.5):
+    /// [both, camera only, oracle only, neither].
+    pub confusion: [u64; 4],
     /// Exit slots (row 8.4), when the scene has them: a transfer goes into
     /// the lowest free one.
     slots: Option<mast::SlotAllocator>,
@@ -103,6 +110,19 @@ pub fn box_in_slot(qpos: &[f64], meta: &SceneMeta, cell: CellId, slot: usize) ->
         return false;
     };
     (b[0] - p[0]).hypot(b[1] - p[1]) < 0.02 && (b[2] - p[2]).abs() < 0.01
+}
+
+/// How often the camera samples while physics runs, in ticks (1 s), and
+/// always on the tick after the clock jumps (row 11.3).
+pub const CAMERA_PERIOD_TICKS: u32 = 50;
+
+/// What the camera knows (row 11.5).
+struct CameraState {
+    cams: crate::camera::Cameras,
+    obs: Vec<CellObs>,
+    first_seen: Vec<Option<f64>>,
+    ticks: u32,
+    jumped: bool,
 }
 
 /// One block of physics as `targets.csv` records it (row 8.6).
@@ -233,6 +253,8 @@ impl<W: Write> BtHooks<W> {
             shells: None,
             event_seq: 0,
             detector: DetectorKind::default().build(),
+            camera: None,
+            confusion: [0; 4],
             slots: (n_slots > 0).then(|| mast::SlotAllocator::new(n_slots)),
             slot_of: Vec::new(),
             blocks: Vec::new(),
@@ -245,6 +267,22 @@ impl<W: Write> BtHooks<W> {
 
     /// Give the hooks a shell mover, already subscribed to the world's bus
     /// (row 7.5).
+    /// Use detector `kind` (Phase 11). The camera samples `sim`'s views.
+    pub fn with_detector(mut self, kind: DetectorKind, sim: &Sim) -> Self {
+        self.detector = kind.build();
+        self.camera = (kind == DetectorKind::Camera).then(|| {
+            let n = crate::cells::count(&self.meta);
+            CameraState {
+                cams: crate::camera::Cameras::new(sim, &self.meta),
+                obs: vec![CellObs::default(); n],
+                first_seen: vec![None; n],
+                ticks: CAMERA_PERIOD_TICKS,
+                jumped: true,
+            }
+        });
+        self
+    }
+
     pub fn with_shells(mut self, mover: Option<ShellMover>) -> Self {
         self.shells = mover;
         self
@@ -316,6 +354,9 @@ impl<W: Write> BtHooks<W> {
         let events = world.step(dt);
         self.bio_time += dt;
         self.pending_ff += dt;
+        if let Some(cam) = self.camera.as_mut() {
+            cam.jumped = true;
+        }
         // The shell mover's inbox has these too; it acts on the next tick,
         // which the clock always runs right after a jump.
         self.record(events);
@@ -369,25 +410,6 @@ impl<W: Write> Hooks for BtHooks<W> {
             let events = world.step(self.tick_dt);
             self.record(events);
         }
-        // Row 8.3: what the detector sees, for the tree's `detected` key.
-        if let Some(world) = self.world.as_ref() {
-            let obs = CellObs::default(); // the oracle reads the world, not the sim
-            let q = sim.qpos();
-            let mut cells = Vec::new();
-            for (i, (cell, _)) in world.animals().iter().enumerate() {
-                if self.detector.detect(*cell, &obs, world).is_some() {
-                    cells.push(BbDetected {
-                        tray: cell.tray,
-                        r: cell.r,
-                        c: cell.c,
-                        closes_in: world.window_left(i).unwrap_or(0.0),
-                        eta: eta(self.crane.targets(), *cell, &self.meta),
-                        blocked: row_blocked(&q, &self.meta, &self.slot_of, *cell),
-                    });
-                }
-            }
-            self.schema.write_detected(&mut self.bb, cells);
-        }
         // Shells move before the snapshot, so the tree and physics see them.
         if let Some(mover) = self.shells.as_mut() {
             let errors = mover.apply(sim, self.bio_time);
@@ -413,6 +435,64 @@ impl<W: Write> Hooks for BtHooks<W> {
                 }
             }
             self.record(cleared);
+        }
+        // Row 11.5: the camera samples after the shells have moved, on the
+        // tick after a jump and every CAMERA_PERIOD_TICKS while physics runs.
+        if let (Some(cam), Some(world)) = (self.camera.as_mut(), self.world.as_ref()) {
+            cam.ticks += 1;
+            if cam.jumped || cam.ticks >= CAMERA_PERIOD_TICKS {
+                cam.jumped = false;
+                cam.ticks = 0;
+                let mut oracle = rookery_core::OracleDetector;
+                for (i, (cell, _)) in world.animals().iter().enumerate() {
+                    let n = cam.cams.bodies(sim, *cell);
+                    cam.obs[i] = CellObs {
+                        bodies_in_box: n.min(255) as u8,
+                        shell_present: n >= 2,
+                    };
+                    match (n >= 2, cam.first_seen[i]) {
+                        (true, None) => cam.first_seen[i] = Some(self.bio_time),
+                        (false, _) => cam.first_seen[i] = None,
+                        _ => {}
+                    }
+                    let truth = oracle.detect(*cell, &CellObs::default(), world).is_some();
+                    self.confusion[match (n >= 2, truth) {
+                        (true, true) => 0,
+                        (true, false) => 1,
+                        (false, true) => 2,
+                        (false, false) => 3,
+                    }] += 1;
+                }
+            }
+        }
+        // Row 8.3: what the detector sees, for the tree's `detected` key.
+        if let Some(world) = self.world.as_ref() {
+            let blank = CellObs::default(); // the oracle reads the world, not the sim
+            let q = sim.qpos();
+            let window = world.params.molting_mean + world.params.soft_window;
+            let mut cells = Vec::new();
+            for (i, (cell, _)) in world.animals().iter().enumerate() {
+                let obs = self.camera.as_ref().map_or(&blank, |c| &c.obs[i]);
+                if self.detector.detect(*cell, obs, world).is_some() {
+                    // The camera can't see the hidden stage: it estimates the
+                    // window from when it first saw the shell (row 11.5).
+                    let closes_in = match self.camera.as_ref() {
+                        Some(c) => {
+                            c.first_seen[i].map_or(window, |t0| window - (self.bio_time - t0))
+                        }
+                        None => world.window_left(i).unwrap_or(0.0),
+                    };
+                    cells.push(BbDetected {
+                        tray: cell.tray,
+                        r: cell.r,
+                        c: cell.c,
+                        closes_in,
+                        eta: eta(self.crane.targets(), *cell, &self.meta),
+                        blocked: row_blocked(&q, &self.meta, &self.slot_of, *cell),
+                    });
+                }
+            }
+            self.schema.write_detected(&mut self.bb, cells);
         }
         let obs = self.crane.observe(sim);
         let snap = GantrySnapshot {
