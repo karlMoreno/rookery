@@ -1,0 +1,347 @@
+<mujoco model="rookery">
+  <option timestep="0.001000" gravity="0.000000 0.000000 -9.810000" />
+  <visual>
+    <global offwidth="1280" offheight="960" />
+  </visual>
+  <worldbody>
+    <light name="sun" pos="0.000000 0.000000 2.000000" dir="0.000000 0.000000 -1.000000" diffuse="0.800000 0.800000 0.800000" />
+    <camera name="overview" pos="0.072000 -0.775000 0.620000" xyaxes="0.962964 0.269630 0.000000 -0.135973 0.485618 0.863532" />
+    <geom name="ground" type="plane" size="2.000000 2.000000 0.100000" pos="0.000000 0.000000 -0.010000" rgba="0.300000 0.320000 0.300000 1.000000" contype="4" conaffinity="1" />
+    <body name="tray_0" pos="0.000000 0.000000 0.000000">
+      <geom name="tray_0_floor" type="box" size="0.085000 0.310000 0.005000" pos="0.000000 0.000000 -0.005000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_0_wall_xneg" type="box" size="0.005000 0.310000 0.040000" pos="-0.080000 0.000000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_0_wall_xpos" type="box" size="0.005000 0.310000 0.040000" pos="0.080000 0.000000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_0_wall_yneg" type="box" size="0.075000 0.005000 0.040000" pos="0.000000 -0.305000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_0_wall_ypos" type="box" size="0.075000 0.005000 0.040000" pos="0.000000 0.305000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+    </body>
+    <body name="tray_1" pos="0.000000 0.000000 0.285000">
+      <geom name="tray_1_floor" type="box" size="0.085000 0.310000 0.005000" pos="0.000000 0.000000 -0.005000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_1_wall_xneg" type="box" size="0.005000 0.310000 0.040000" pos="-0.080000 0.000000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_1_wall_xpos" type="box" size="0.005000 0.310000 0.040000" pos="0.080000 0.000000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_1_wall_yneg" type="box" size="0.075000 0.005000 0.040000" pos="0.000000 -0.305000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_1_wall_ypos" type="box" size="0.075000 0.005000 0.040000" pos="0.000000 0.305000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+    </body>
+    <body name="tray_2" pos="0.000000 0.000000 0.570000">
+      <geom name="tray_2_floor" type="box" size="0.085000 0.310000 0.005000" pos="0.000000 0.000000 -0.005000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_2_wall_xneg" type="box" size="0.005000 0.310000 0.040000" pos="-0.080000 0.000000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_2_wall_xpos" type="box" size="0.005000 0.310000 0.040000" pos="0.080000 0.000000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_2_wall_yneg" type="box" size="0.075000 0.005000 0.040000" pos="0.000000 -0.305000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+      <geom name="tray_2_wall_ypos" type="box" size="0.075000 0.005000 0.040000" pos="0.000000 0.305000 0.040000" rgba="0.550000 0.550000 0.580000 1.000000" />
+    </body>
+    <geom name="rack_post_0" type="cylinder" size="0.012000 0.290000" pos="-0.095000 -0.320000 0.280000" contype="0" conaffinity="0" rgba="0.550000 0.550000 0.580000 1.000000" />
+    <geom name="rack_post_1" type="cylinder" size="0.012000 0.290000" pos="0.095000 -0.320000 0.280000" contype="0" conaffinity="0" rgba="0.550000 0.550000 0.580000 1.000000" />
+    <geom name="rack_post_2" type="cylinder" size="0.012000 0.290000" pos="-0.095000 0.320000 0.280000" contype="0" conaffinity="0" rgba="0.550000 0.550000 0.580000 1.000000" />
+    <geom name="rack_post_3" type="cylinder" size="0.012000 0.290000" pos="0.095000 0.320000 0.280000" contype="0" conaffinity="0" rgba="0.550000 0.550000 0.580000 1.000000" />
+    <geom name="water" type="box" size="0.075000 0.300000 0.025000" pos="0.000000 0.000000 0.025000" contype="0" conaffinity="0" rgba="0.250000 0.550000 0.850000 0.350000" />
+    <geom name="water_1" type="box" size="0.075000 0.300000 0.025000" pos="0.000000 0.000000 0.310000" contype="0" conaffinity="0" rgba="0.250000 0.550000 0.850000 0.350000" />
+    <geom name="water_2" type="box" size="0.075000 0.300000 0.025000" pos="0.000000 0.000000 0.595000" contype="0" conaffinity="0" rgba="0.250000 0.550000 0.850000 0.350000" />
+    <body name="box_0_0" pos="0.000000 -0.225000 0.000000">
+      <freejoint name="box_0_0_free" />
+      <geom name="box_0_0_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_0_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_0_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_0_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_0_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_0_0_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_0_0_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_0_0" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_0_1" pos="0.000000 -0.075000 0.000000">
+      <freejoint name="box_0_1_free" />
+      <geom name="box_0_1_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_1_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_1_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_1_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_1_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_0_1_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_0_1_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_0_1" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_0_2" pos="0.000000 0.075000 0.000000">
+      <freejoint name="box_0_2_free" />
+      <geom name="box_0_2_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_2_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_2_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_2_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_2_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_0_2_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_0_2_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_0_2" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_0_3" pos="0.000000 0.225000 0.000000">
+      <freejoint name="box_0_3_free" />
+      <geom name="box_0_3_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_3_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_3_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_3_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_0_3_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_0_3_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_0_3_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_0_3" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_1_0_0" pos="0.000000 -0.225000 0.285000">
+      <freejoint name="box_1_0_0_free" />
+      <geom name="box_1_0_0_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_0_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_0_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_0_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_0_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_1_0_0_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_1_0_0_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_1_0_0" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_1_0_1" pos="0.000000 -0.075000 0.285000">
+      <freejoint name="box_1_0_1_free" />
+      <geom name="box_1_0_1_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_1_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_1_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_1_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_1_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_1_0_1_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_1_0_1_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_1_0_1" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_1_0_2" pos="0.000000 0.075000 0.285000">
+      <freejoint name="box_1_0_2_free" />
+      <geom name="box_1_0_2_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_2_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_2_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_2_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_2_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_1_0_2_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_1_0_2_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_1_0_2" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_1_0_3" pos="0.000000 0.225000 0.285000">
+      <freejoint name="box_1_0_3_free" />
+      <geom name="box_1_0_3_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_3_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_3_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_3_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_1_0_3_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_1_0_3_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_1_0_3_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_1_0_3" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_2_0_0" pos="0.000000 -0.225000 0.570000">
+      <freejoint name="box_2_0_0_free" />
+      <geom name="box_2_0_0_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_0_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_0_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_0_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_0_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_2_0_0_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_2_0_0_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_2_0_0" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_2_0_1" pos="0.000000 -0.075000 0.570000">
+      <freejoint name="box_2_0_1_free" />
+      <geom name="box_2_0_1_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_1_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_1_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_1_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_1_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_2_0_1_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_2_0_1_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_2_0_1" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_2_0_2" pos="0.000000 0.075000 0.570000">
+      <freejoint name="box_2_0_2_free" />
+      <geom name="box_2_0_2_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_2_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_2_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_2_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_2_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_2_0_2_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_2_0_2_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_2_0_2" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="box_2_0_3" pos="0.000000 0.225000 0.570000">
+      <freejoint name="box_2_0_3_free" />
+      <geom name="box_2_0_3_floor" type="box" size="0.060000 0.060000 0.002000" pos="0.000000 0.000000 0.002000" mass="0.024000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_3_wall_xneg" type="box" size="0.001500 0.060000 0.038000" pos="-0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_3_wall_xpos" type="box" size="0.001500 0.060000 0.038000" pos="0.058500 0.000000 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_3_wall_yneg" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 -0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="box_2_0_3_wall_ypos" type="box" size="0.057000 0.001500 0.038000" pos="0.000000 0.058500 0.042000" mass="0.024000" margin="0.001000" rgba="0.850000 0.450000 0.150000 1.000000" />
+      <geom name="post_2_0_3_yneg" type="cylinder" size="0.003000 0.019500" pos="0.000000 -0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="post_2_0_3_ypos" type="cylinder" size="0.003000 0.019500" pos="0.000000 0.051000 0.099500" mass="0.002000" rgba="0.900000 0.850000 0.200000 1.000000" />
+      <geom name="handle_2_0_3" type="capsule" fromto="0.000000 -0.051000 0.119000 0.000000 0.051000 0.119000" size="0.006000" mass="0.005000" rgba="0.900000 0.850000 0.200000 1.000000" />
+    </body>
+    <body name="crawfish_0_0" pos="0.000000 -0.225000 0.016000">
+      <freejoint name="crawfish_0_0_free" />
+      <geom name="crawfish_0_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_0_1" pos="0.000000 -0.075000 0.016000">
+      <freejoint name="crawfish_0_1_free" />
+      <geom name="crawfish_0_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_0_2" pos="0.000000 0.075000 0.016000">
+      <freejoint name="crawfish_0_2_free" />
+      <geom name="crawfish_0_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_0_3" pos="0.000000 0.225000 0.016000">
+      <freejoint name="crawfish_0_3_free" />
+      <geom name="crawfish_0_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_0_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_0_0" pos="0.000000 -0.225000 0.301000">
+      <freejoint name="crawfish_1_0_0_free" />
+      <geom name="crawfish_1_0_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_0_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_0_1" pos="0.000000 -0.075000 0.301000">
+      <freejoint name="crawfish_1_0_1_free" />
+      <geom name="crawfish_1_0_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_0_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_0_2" pos="0.000000 0.075000 0.301000">
+      <freejoint name="crawfish_1_0_2_free" />
+      <geom name="crawfish_1_0_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_0_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_1_0_3" pos="0.000000 0.225000 0.301000">
+      <freejoint name="crawfish_1_0_3_free" />
+      <geom name="crawfish_1_0_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_1_0_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_0_0" pos="0.000000 -0.225000 0.586000">
+      <freejoint name="crawfish_2_0_0_free" />
+      <geom name="crawfish_2_0_0_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_0_0_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_0_1" pos="0.000000 -0.075000 0.586000">
+      <freejoint name="crawfish_2_0_1_free" />
+      <geom name="crawfish_2_0_1_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_0_1_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_0_2" pos="0.000000 0.075000 0.586000">
+      <freejoint name="crawfish_2_0_2_free" />
+      <geom name="crawfish_2_0_2_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_0_2_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <body name="crawfish_2_0_3" pos="0.000000 0.225000 0.586000">
+      <freejoint name="crawfish_2_0_3_free" />
+      <geom name="crawfish_2_0_3_body" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.012000" mass="0.030000" rgba="0.700000 0.250000 0.200000 1.000000" />
+      <site name="crawfish_2_0_3_site" type="capsule" fromto="-0.028000 0.000000 0.000000 0.028000 0.000000 0.000000" size="0.013200" />
+    </body>
+    <geom name="shell_park" type="box" size="0.075000 0.300000 0.005000" pos="0.000000 0.000000 -0.305000" contype="0" conaffinity="2" group="3" rgba="0.550000 0.550000 0.580000 1.000000" />
+    <body name="shell_0_0" pos="0.000000 -0.225000 -0.290000" gravcomp="1">
+      <freejoint name="shell_0_0_free" />
+      <geom name="shell_0_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_0_1" pos="0.000000 -0.075000 -0.290000" gravcomp="1">
+      <freejoint name="shell_0_1_free" />
+      <geom name="shell_0_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_0_2" pos="0.000000 0.075000 -0.290000" gravcomp="1">
+      <freejoint name="shell_0_2_free" />
+      <geom name="shell_0_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_0_3" pos="0.000000 0.225000 -0.290000" gravcomp="1">
+      <freejoint name="shell_0_3_free" />
+      <geom name="shell_0_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_1_0_0" pos="0.000000 -0.225000 -0.290000" gravcomp="1">
+      <freejoint name="shell_1_0_0_free" />
+      <geom name="shell_1_0_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_1_0_1" pos="0.000000 -0.075000 -0.290000" gravcomp="1">
+      <freejoint name="shell_1_0_1_free" />
+      <geom name="shell_1_0_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_1_0_2" pos="0.000000 0.075000 -0.290000" gravcomp="1">
+      <freejoint name="shell_1_0_2_free" />
+      <geom name="shell_1_0_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_1_0_3" pos="0.000000 0.225000 -0.290000" gravcomp="1">
+      <freejoint name="shell_1_0_3_free" />
+      <geom name="shell_1_0_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_2_0_0" pos="0.000000 -0.225000 -0.290000" gravcomp="1">
+      <freejoint name="shell_2_0_0_free" />
+      <geom name="shell_2_0_0_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_2_0_1" pos="0.000000 -0.075000 -0.290000" gravcomp="1">
+      <freejoint name="shell_2_0_1_free" />
+      <geom name="shell_2_0_1_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_2_0_2" pos="0.000000 0.075000 -0.290000" gravcomp="1">
+      <freejoint name="shell_2_0_2_free" />
+      <geom name="shell_2_0_2_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <body name="shell_2_0_3" pos="0.000000 0.225000 -0.290000" gravcomp="1">
+      <freejoint name="shell_2_0_3_free" />
+      <geom name="shell_2_0_3_body" type="capsule" fromto="-0.022000 0.000000 0.000000 0.022000 0.000000 0.000000" size="0.008000" mass="0.005000" contype="2" conaffinity="1" rgba="0.950000 0.750000 0.600000 0.600000" />
+    </body>
+    <geom name="exit_tray" type="box" size="0.075000 0.450000 0.005000" pos="-0.170000 0.000000 0.095000" rgba="0.200000 0.600000 0.300000 1.000000" />
+    <geom name="exit_tray_leg" type="cylinder" size="0.015000 0.050000" pos="-0.170000 -0.375000 0.040000" rgba="0.200000 0.600000 0.300000 1.000000" />
+    <geom name="exit_tray_leg_2" type="cylinder" size="0.015000 0.050000" pos="-0.170000 0.375000 0.040000" rgba="0.200000 0.600000 0.300000 1.000000" />
+    <geom name="floor_rail" type="box" size="0.020000 0.450000 0.020000" pos="-0.365000 0.000000 0.010000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
+    <geom name="guide_rail" type="box" size="0.020000 0.450000 0.020000" pos="-0.365000 0.000000 1.020000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
+    <geom name="guide_post_yneg" type="box" size="0.020000 0.020000 0.505000" pos="-0.365000 -0.450000 0.495000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
+    <geom name="guide_post_ypos" type="box" size="0.020000 0.020000 0.505000" pos="-0.365000 0.450000 0.495000" contype="0" conaffinity="0" rgba="0.350000 0.370000 0.420000 1.000000" />
+    <body name="crane_truck" pos="-0.365000 0.000000 0.000000" gravcomp="1">
+      <joint name="rail_y" type="slide" axis="0.000000 1.000000 0.000000" range="-0.400000 0.400000" limited="true" ref="0.000000" damping="5.000000" armature="0.050000" />
+      <inertial pos="0.000000 0.000000 0.000000" mass="5.000000" diaginertia="0.010000 0.010000 0.010000" />
+      <geom name="crane_truck_body" type="box" size="0.060000 0.080000 0.030000" pos="0.000000 0.000000 0.060000" contype="0" conaffinity="0" rgba="0.850000 0.750000 0.200000 1.000000" />
+      <geom name="crane_mast" type="box" size="0.025000 0.025000 0.505000" pos="-0.040000 0.000000 0.495000" contype="0" conaffinity="0" rgba="0.850000 0.750000 0.200000 1.000000" />
+      <body name="crane_carriage" pos="0.000000 0.000000 0.450000" gravcomp="1">
+        <joint name="mast_z" type="slide" axis="0.000000 0.000000 1.000000" range="0.050000 0.800000" limited="true" ref="0.450000" damping="5.000000" armature="0.050000" />
+        <inertial pos="0.000000 0.000000 0.000000" mass="1.000000" diaginertia="0.010000 0.010000 0.010000" />
+        <geom name="crane_carriage_body" type="box" size="0.030000 0.050000 0.030000" pos="-0.010000 0.000000 0.020000" contype="0" conaffinity="0" rgba="0.850000 0.750000 0.200000 1.000000" />
+        <body name="crane_arm" pos="0.000000 0.000000 0.000000" gravcomp="1">
+          <joint name="arm_x" type="slide" axis="1.000000 0.000000 0.000000" range="0.000000 0.850000" limited="true" ref="0.000000" damping="5.000000" armature="0.050000" />
+          <inertial pos="0.000000 0.000000 0.000000" mass="0.500000" diaginertia="0.010000 0.010000 0.010000" />
+          <geom name="crane_arm_beam" type="box" size="0.450000 0.012000 0.010000" pos="-0.450000 0.000000 0.020000" contype="0" conaffinity="0" rgba="0.850000 0.750000 0.200000 1.000000" />
+          <body name="crane_hook" pos="0.000000 0.000000 0.000000" gravcomp="1">
+            <joint name="hook_lift" type="slide" axis="0.000000 0.000000 1.000000" range="0.000000 0.030000" limited="true" ref="0.000000" damping="5.000000" armature="0.050000" />
+            <inertial pos="0.000000 0.000000 0.000000" mass="0.100000" diaginertia="0.010000 0.010000 0.010000" />
+            <geom name="hook" type="box" size="0.020000 0.015000 0.004000" pos="0.020000 0.000000 0.000000" rgba="0.800000 0.200000 0.200000 1.000000" />
+            <geom name="hook_tip" type="box" size="0.004000 0.015000 0.007500" pos="0.040000 0.000000 0.007500" rgba="0.800000 0.200000 0.200000 1.000000" />
+            <geom name="hook_stem" type="capsule" size="0.004000" fromto="0.000000 0.000000 0.000000 0.000000 0.000000 0.020000" contype="0" conaffinity="0" rgba="0.800000 0.200000 0.200000 1.000000" />
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <sensor>
+    <touch name="touch_0_0" site="crawfish_0_0_site" />
+    <touch name="touch_0_1" site="crawfish_0_1_site" />
+    <touch name="touch_0_2" site="crawfish_0_2_site" />
+    <touch name="touch_0_3" site="crawfish_0_3_site" />
+    <touch name="touch_1_0_0" site="crawfish_1_0_0_site" />
+    <touch name="touch_1_0_1" site="crawfish_1_0_1_site" />
+    <touch name="touch_1_0_2" site="crawfish_1_0_2_site" />
+    <touch name="touch_1_0_3" site="crawfish_1_0_3_site" />
+    <touch name="touch_2_0_0" site="crawfish_2_0_0_site" />
+    <touch name="touch_2_0_1" site="crawfish_2_0_1_site" />
+    <touch name="touch_2_0_2" site="crawfish_2_0_2_site" />
+    <touch name="touch_2_0_3" site="crawfish_2_0_3_site" />
+  </sensor>
+  <contact>
+    <exclude body1="shell_0_0" body2="crawfish_0_0" />
+    <exclude body1="shell_0_1" body2="crawfish_0_1" />
+    <exclude body1="shell_0_2" body2="crawfish_0_2" />
+    <exclude body1="shell_0_3" body2="crawfish_0_3" />
+    <exclude body1="shell_1_0_0" body2="crawfish_1_0_0" />
+    <exclude body1="shell_1_0_1" body2="crawfish_1_0_1" />
+    <exclude body1="shell_1_0_2" body2="crawfish_1_0_2" />
+    <exclude body1="shell_1_0_3" body2="crawfish_1_0_3" />
+    <exclude body1="shell_2_0_0" body2="crawfish_2_0_0" />
+    <exclude body1="shell_2_0_1" body2="crawfish_2_0_1" />
+    <exclude body1="shell_2_0_2" body2="crawfish_2_0_2" />
+    <exclude body1="shell_2_0_3" body2="crawfish_2_0_3" />
+  </contact>
+  <actuator>
+    <position name="rail_y" joint="rail_y" kp="600.000000" dampratio="1.000000" ctrlrange="-0.400000 0.400000" />
+    <position name="mast_z" joint="mast_z" kp="2000.000000" dampratio="1.000000" ctrlrange="0.050000 0.800000" />
+    <position name="arm_x" joint="arm_x" kp="200.000000" dampratio="1.000000" ctrlrange="0.000000 0.850000" />
+    <position name="hook_lift" joint="hook_lift" kp="2000.000000" dampratio="1.000000" ctrlrange="0.000000 0.030000" />
+  </actuator>
+  <keyframe>
+    <key name="home" ctrl="0.000000 0.450000 0.000000 0.000000" />
+  </keyframe>
+</mujoco>

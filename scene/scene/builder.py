@@ -199,25 +199,45 @@ class MjcfBuilder:
         return self
 
     def tray(self) -> MjcfBuilder:
-        """Body ``tray_0``: a floor slab under z = 0 and four walls around the grid."""
+        """Body ``tray_t`` per tray: a floor slab under its base and four walls
+        around the grid. Tray 0's base is z = 0; with ``trays > 1`` (Phase 10)
+        the others stack at ``spec.shelf_pitch`` on four rack posts.
+
+        ```text
+          tray_2  ┌──────────────┐  base 2·pitch
+                  │   handles    │  ↕ shelf_gap clear under tray 2's floor
+          tray_1  ├──────────────┤  base pitch
+          tray_0  ├──────────────┤  base 0
+                 post          post   (rack, contact-free)
+        ```
+        """
         s = self.spec
         hx, hy = s.tray_size[0] / 2, s.tray_size[1] / 2
         t = TRAY_WALL
         wall_h = s.water_depth + TRAY_FREEBOARD
         rgba = ("rgba", num(*TRAY_RGBA))
-        body = self._el(self.worldbody, "body", [("name", "tray_0"), ("pos", num(0, 0, 0))])
-        self._el(body, "geom", [("name", "tray_0_floor"), ("type", "box"),
-                                ("size", num(hx + t, hy + t, t / 2)), ("pos", num(0, 0, -t / 2)), rgba])
-        # Fixed order: -X, +X, -Y, +Y. The X walls span the full outer length.
-        walls = (
-            ("xneg", (-(hx + t / 2), 0), (t / 2, hy + t)),
-            ("xpos", (hx + t / 2, 0), (t / 2, hy + t)),
-            ("yneg", (0, -(hy + t / 2)), (hx, t / 2)),
-            ("ypos", (0, hy + t / 2), (hx, t / 2)),
-        )
-        for side, (x, y), (sx, sy) in walls:
-            self._el(body, "geom", [("name", f"tray_0_wall_{side}"), ("type", "box"),
-                                    ("size", num(sx, sy, wall_h / 2)), ("pos", num(x, y, wall_h / 2)), rgba])
+        for tr in range(s.trays):
+            body = self._el(self.worldbody, "body", [("name", f"tray_{tr}"), ("pos", num(0, 0, s.shelf_base_z(tr)))])
+            self._el(body, "geom", [("name", f"tray_{tr}_floor"), ("type", "box"),
+                                    ("size", num(hx + t, hy + t, t / 2)), ("pos", num(0, 0, -t / 2)), rgba])
+            # Fixed order: -X, +X, -Y, +Y. The X walls span the full outer length.
+            walls = (
+                ("xneg", (-(hx + t / 2), 0), (t / 2, hy + t)),
+                ("xpos", (hx + t / 2, 0), (t / 2, hy + t)),
+                ("yneg", (0, -(hy + t / 2)), (hx, t / 2)),
+                ("ypos", (0, hy + t / 2), (hx, t / 2)),
+            )
+            for side, (x, y), (sx, sy) in walls:
+                self._el(body, "geom", [("name", f"tray_{tr}_wall_{side}"), ("type", "box"),
+                                        ("size", num(sx, sy, wall_h / 2)), ("pos", num(x, y, wall_h / 2)), rgba])
+        if s.trays > 1:
+            top = s.shelf_base_z(s.trays - 1)
+            half = (top + TRAY_WALL) / 2
+            for i, (px, py) in enumerate(((-1, -1), (1, -1), (-1, 1), (1, 1))):
+                self._el(self.worldbody, "geom", [
+                    ("name", f"rack_post_{i}"), ("type", "cylinder"), ("size", num(0.012, half)),
+                    ("pos", num(px * (hx + 2 * t), py * (hy + 2 * t), -TRAY_WALL + half)),
+                    ("contype", "0"), ("conaffinity", "0"), rgba])
         return self
 
     def water(self) -> MjcfBuilder:
@@ -229,10 +249,13 @@ class MjcfBuilder:
         s = self.spec
         hx, hy = s.tray_size[0] / 2, s.tray_size[1] / 2
         d = s.water_depth
-        self._el(self.worldbody, "geom", [
-            ("name", "water"), ("type", "box"), ("size", num(hx, hy, d / 2)), ("pos", num(0, 0, d / 2)),
-            ("contype", "0"), ("conaffinity", "0"), ("rgba", num(*WATER_RGBA)),
-        ])
+        for tr in range(s.trays):
+            name = "water" if tr == 0 else f"water_{tr}"
+            self._el(self.worldbody, "geom", [
+                ("name", name), ("type", "box"), ("size", num(hx, hy, d / 2)),
+                ("pos", num(0, 0, s.shelf_base_z(tr) + d / 2)),
+                ("contype", "0"), ("conaffinity", "0"), ("rgba", num(*WATER_RGBA)),
+            ])
         return self
 
     def cells(self) -> MjcfBuilder:
@@ -263,11 +286,12 @@ class MjcfBuilder:
         handle_z = s.handle_top_z - handle_r
         handle_half = hy - t - handle_r
         post_half = (handle_z - h) / 2
-        for r in range(s.rows):
-            for c in range(s.cols):
+        for tr in range(s.trays):
+            for r, c in s.grid():
                 x, y = s.cell_center(r, c)
-                tag = f"{r}_{c}"
-                body = self._el(self.worldbody, "body", [("name", f"box_{tag}"), ("pos", num(x, y, 0))])
+                tag = s.cell_tag(tr, r, c)
+                body = self._el(self.worldbody, "body", [("name", f"box_{tag}"),
+                                                          ("pos", num(x, y, s.shelf_base_z(tr)))])
                 self._el(body, "freejoint", [("name", f"box_{tag}_free")])
                 self._el(body, "geom", [("name", f"box_{tag}_floor"), ("type", "box"),
                                         ("size", num(hx, hy, f / 2)), ("pos", num(0, 0, f / 2)),
@@ -309,12 +333,12 @@ class MjcfBuilder:
         r = s.crawfish_radius
         half = s.crawfish_length / 2 - r  # capsule segment half-length
         sensor = self._el(self.root, "sensor")
-        for row in range(s.rows):
-            for col in range(s.cols):
+        for tr in range(s.trays):
+            for row, col in s.grid():
                 x, y = s.cell_center(row, col)
-                tag = f"{row}_{col}"
+                tag = s.cell_tag(tr, row, col)
                 body = self._el(self.worldbody, "body", [("name", f"crawfish_{tag}"),
-                                                          ("pos", num(x, y, BOX_FLOOR + r))])
+                                                          ("pos", num(x, y, s.shelf_base_z(tr) + BOX_FLOOR + r))])
                 self._el(body, "freejoint", [("name", f"crawfish_{tag}_free")])
                 self._el(body, "geom", [("name", f"crawfish_{tag}_body"), ("type", "capsule"),
                                         ("fromto", num(-half, 0, 0, half, 0, 0)), ("size", num(r)),
@@ -363,9 +387,9 @@ class MjcfBuilder:
         r = s.shell_radius
         half = s.shell_length / 2 - r
         contact = self._el(self.root, "contact") if s.crawfish else None
-        for row in range(s.rows):
-            for col in range(s.cols):
-                tag = f"{row}_{col}"
+        for tr in range(s.trays):
+            for row, col in s.grid():
+                tag = s.cell_tag(tr, row, col)
                 body = self._el(self.worldbody, "body", [("name", f"shell_{tag}"),
                                                           ("pos", num(*s.shell_parked(row, col))),
                                                           ("gravcomp", "1")])
@@ -572,6 +596,8 @@ def spec_json(spec: SceneSpec) -> str:
     # Resolved placements, so a reader never has to re-derive the defaults.
     data["derived"] = {"exit_pose": list(spec.exit_pose), "rail_line_x": spec.rail_line_x,
                        "exit_slots": [list(p) for p in spec.exit_slot_poses]}
+    if spec.trays > 1:  # one-tray recipes stay byte-identical (Phase 10)
+        data["derived"]["shelf_bases"] = [spec.shelf_base_z(t) for t in range(spec.trays)]
     return json.dumps(data, sort_keys=True, indent=2) + "\n"
 
 
