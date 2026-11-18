@@ -66,11 +66,27 @@ pub struct AutonomyReport {
     pub physics_seconds: f64,
 }
 
-/// Run one tray unattended for `args.bio_seconds` of biological time.
+/// Run one tray unattended for `args.bio_seconds` of biological time, with
+/// the oracle detector.
 ///
 /// # Errors
 /// A scene, tree or log that cannot be loaded or written.
 pub fn run(args: &AutonomyArgs) -> Result<AutonomyReport, String> {
+    run_with(args, rookery_core::DetectorKind::Oracle)
+}
+
+/// [`run`] with the detector `detector` (Phase 11: the camera). Swapping
+/// detectors changes nothing else.
+///
+/// # Errors
+/// As [`run`].
+pub fn run_with(
+    args: &AutonomyArgs,
+    detector: rookery_core::DetectorKind,
+) -> Result<AutonomyReport, String> {
+    if detector == rookery_core::DetectorKind::Camera {
+        todo!("row 11.5: the Integrator builds each cell's CellObs from its depth view");
+    }
     let meta_path = args.scene.with_extension("json");
     let meta = SceneMeta::load(&meta_path).map_err(|e| e.to_string())?;
     let lua = mlua::Lua::new();

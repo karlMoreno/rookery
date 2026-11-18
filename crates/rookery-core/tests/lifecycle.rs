@@ -331,13 +331,14 @@ fn a_harvested_cell_is_lifted_once_and_never_misses_its_window() {
 }
 
 #[test]
-fn detector_kind_parses_oracle_only() {
+fn detector_kind_parses_oracle_and_camera() {
     use rookery_core::DetectorKind;
     assert_eq!("oracle".parse::<DetectorKind>(), Ok(DetectorKind::Oracle));
+    assert_eq!("camera".parse::<DetectorKind>(), Ok(DetectorKind::Camera));
     assert!(
-        "camera"
+        "lidar"
             .parse::<DetectorKind>()
             .unwrap_err()
-            .contains("oracle")
+            .contains("camera")
     );
 }

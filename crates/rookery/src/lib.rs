@@ -6,6 +6,7 @@
 //!      │ uses
 //!   lib.rs ── autonomy unattended runs: the Phase 8 gate's entry point
 //!          ── config   rookery.toml: which farm to run (10.4)
+//!          ── camera   each cell's depth view and the fidelity samples (11)
 //!          ── cells    every tray's cells: order, names, qpos blocks (10.5)
 //!          ── runner   Template Method: physics at 1 kHz, hooks at 50 Hz
 //!          ── crane    MoveCommand player, sim → GantryObs, qpos log
@@ -21,6 +22,7 @@
 
 pub mod autonomy;
 pub mod bt_hooks;
+pub mod camera;
 pub mod cells;
 pub mod config;
 pub mod crane;

@@ -546,18 +546,35 @@ impl MoltDetector for OracleDetector {
     }
 }
 
-/// Which detector to build (`detector = "oracle"` in config). Only the
-/// oracle exists until Phase 11.
+/// The camera's detector (Phase 11): a cell has molted when its depth view
+/// shows two bodies on the box floor, the animal and its shed shell. It sees
+/// only what the Integrator put in the [`CellObs`], never the world.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CameraDetector;
+
+impl MoltDetector for CameraDetector {
+    fn detect(&mut self, cell: CellId, obs: &CellObs, _world: &World) -> Option<MoltObservation> {
+        (obs.bodies_in_box >= 2).then_some(MoltObservation {
+            cell,
+            confidence: 1.0,
+        })
+    }
+}
+
+/// Which detector to build (`detector = "oracle"` or `"camera"` in config).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DetectorKind {
     #[default]
     Oracle,
+    /// Phase 11: counts bodies in each cell's depth view.
+    Camera,
 }
 
 impl DetectorKind {
     pub fn build(self) -> Box<dyn MoltDetector> {
         match self {
             DetectorKind::Oracle => Box::new(OracleDetector),
+            DetectorKind::Camera => Box::new(CameraDetector),
         }
     }
 }
@@ -567,8 +584,9 @@ impl std::str::FromStr for DetectorKind {
     fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "oracle" => Ok(DetectorKind::Oracle),
+            "camera" => Ok(DetectorKind::Camera),
             other => Err(format!(
-                "unknown detector `{other}`; the only one is `oracle`"
+                "unknown detector `{other}`; choose `oracle` or `camera`"
             )),
         }
     }

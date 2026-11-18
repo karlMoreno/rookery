@@ -128,9 +128,9 @@ mod tests {
         let e = Config::load(&p).unwrap().validate().unwrap_err();
         assert!(e.contains("trays = 3") && e.contains("has 1"), "{e}");
         let p = write(
-            "camera",
+            "lidar",
             &format!(
-                "scene = {:?}\ndetector = \"camera\"\n",
+                "scene = {:?}\ndetector = \"lidar\"\n",
                 repo("scene/generated/rookery.xml")
             ),
         );
