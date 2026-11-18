@@ -116,6 +116,27 @@ pub fn route(
     Ok(plan.cmds)
 }
 
+/// How far above an engage height a rack approach goes (row 10.5).
+pub const APPROACH_RISE: f64 = 0.06;
+/// Room kept below a window's top, metres.
+pub const WINDOW_EPS: f64 = 0.005;
+
+/// On a rack, the approach height for a target engaged at mast `z`:
+/// `APPROACH_RISE` above it, capped just under the top of the window that
+/// holds `z`. Off a rack, or outside every window, `z` itself.
+pub fn approach_z(z: f64, meta: &SceneMeta) -> f64 {
+    window_top(z, meta).map_or(z, |hi| (z + APPROACH_RISE).min(hi - WINDOW_EPS).max(z))
+}
+
+/// The top of the shelf window that holds mast height `z`, on a rack.
+pub fn window_top(z: f64, meta: &SceneMeta) -> Option<f64> {
+    if !meta.is_rack() {
+        return None;
+    }
+    let w = crate::limits::ShelfWindows::from_meta(meta).ok()?;
+    w.0.iter().find(|r| r.contains(z)).map(|r| r.hi)
+}
+
 /// Where the crane ends after `cmds`, starting from `from`.
 pub fn end_of(from: JointTargets, cmds: &[MoveCommand]) -> JointTargets {
     let mut at = from;
@@ -191,13 +212,17 @@ impl Plan {
             }
         };
         if rack {
-            // Arm retracted in the aisle: go to the target's own height
-            // first, then along the rail, then reach in. The reach stays at
-            // one height, inside that shelf's window.
+            // Arm retracted in the aisle: go to an approach height inside the
+            // target's window, along the rail, reach in short of the handle,
+            // drop to the engage height, then slide under. The approach
+            // height clears the exit tray's plate, which on the bottom shelf
+            // sits above the engage height (found in 10.5: reaching in at
+            // engage height drove the hook into the plate).
             let [y, z, x, _] = target.0;
-            self.go(Axis::MastZ, z);
+            self.go(Axis::MastZ, approach_z(z, meta));
             self.go(Axis::RailY, y);
             self.go(Axis::ArmX, (x - PRE).max(0.0));
+            self.go(Axis::MastZ, z);
             self.go(Axis::ArmX, x);
             return Ok(());
         }

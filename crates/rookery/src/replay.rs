@@ -112,13 +112,7 @@ pub fn replay(dir: &Path) -> Result<ReplayReport, String> {
     let mut sim = Sim::load(&meta.scene).map_err(|e| e.to_string())?;
     sim.apply(&Targets(vec![0.0; 4]))
         .map_err(|e| e.to_string())?;
-    let cells: Vec<CellId> = (0..scene_meta.rows * scene_meta.cols)
-        .map(|i| CellId {
-            tray: 0,
-            r: (i / scene_meta.cols) as u8,
-            c: (i % scene_meta.cols) as u8,
-        })
-        .collect();
+    let cells: Vec<CellId> = crate::cells::all(&scene_meta);
     let mut world = World::new(LifecycleParams::default(), meta.seed, &cells);
     let mut mover = ShellMover::subscribe(
         &sim,
@@ -153,7 +147,7 @@ pub fn replay(dir: &Path) -> Result<ReplayReport, String> {
         }
         let cleared = worker.apply(&mut sim, &mut world, bio);
         events.extend(cleared.into_iter().map(|e| (bio, e)));
-        let lifted = harvest_lifted(&mut world, &sim.qpos());
+        let lifted = harvest_lifted(&mut world, &sim.qpos(), &scene_meta);
         worker.note(&lifted, bio);
         events.extend(lifted.into_iter().map(|e| (bio, e)));
     }

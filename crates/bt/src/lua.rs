@@ -321,7 +321,7 @@ fn view(
     }
     data.set("events", events)?;
     // Row 8.3: the cells detected now, soonest-closing first, each
-    // { tray, r, c, closes_in } (seconds).
+    // { tray, r, c, closes_in, eta, blocked } (seconds).
     let detected = lua.create_table()?;
     if let Ok(Some(cells)) = bb.get_named::<Vec<crate::BbDetected>>("detected") {
         for (i, d) in cells.iter().enumerate() {
@@ -330,6 +330,8 @@ fn view(
             t.set("r", d.r)?;
             t.set("c", d.c)?;
             t.set("closes_in", d.closes_in)?;
+            t.set("eta", d.eta)?;
+            t.set("blocked", d.blocked)?;
             detected.set(i + 1, t)?;
         }
     }

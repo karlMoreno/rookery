@@ -89,11 +89,16 @@ pub struct BtHooks<W: Write> {
     pub delivered: Vec<CellId>,
 }
 
+/// How close (in Y, metres) a box waiting in an exit slot may be to a
+/// bottom-shelf cell before it blocks the crane's way in (row 10.5): half a
+/// box (6 cm) plus half the hook saddle (1.5 cm) plus 1.5 cm.
+pub const BLOCK_DY: f64 = 0.09;
+
 /// Whether `cell`'s box rests in exit slot `slot` (rows 8.4, 8.7): its
 /// floor's centre within 2 cm of the slot, horizontally, and within 1 cm of
 /// the tray top. Boxes come first in qpos, row-major.
 pub fn box_in_slot(qpos: &[f64], meta: &SceneMeta, cell: CellId, slot: usize) -> bool {
-    let i = 7 * (usize::from(cell.r) * meta.cols + usize::from(cell.c));
+    let i = 7 * crate::cells::index(meta, cell);
     let (Some(b), Some(p)) = (qpos.get(i..i + 3), meta.derived.exit_slots.get(slot)) else {
         return false;
     };
@@ -109,16 +114,74 @@ pub struct Block {
     pub targets: [f64; 4],
 }
 
+/// Seconds the crane needs to go from `from` to engaging `cell`, moving one
+/// axis at a time at `MAX_VEL` (row 10.5): a rough travel time for the
+/// tree to weigh against a window, worked out here so Lua never reads limits.
+pub fn eta(from: JointTargets, cell: CellId, meta: &SceneMeta) -> f64 {
+    let Some(to) =
+        mast::kinematics::cell_pose_on(cell.tray.into(), cell.r.into(), cell.c.into(), meta)
+    else {
+        return f64::INFINITY;
+    };
+    (0..4)
+        .map(|k| (to.0[k] - from.0[k]).abs() / mast::limits::MAX_VEL[k])
+        .sum::<f64>()
+        + 2.0 * mast::limits::ARM_X.hi / mast::limits::MAX_VEL[mast::Axis::ArmX.index()] // in and out
+}
+
+/// Whether a box waiting in an exit slot is in the way of `cell` (row 10.5):
+/// only on a rack's bottom shelf, where the arm reaches in at the height of
+/// the boxes on the exit tray.
+pub fn row_blocked(
+    qpos: &[f64],
+    meta: &SceneMeta,
+    slot_of: &[(CellId, usize)],
+    cell: CellId,
+) -> bool {
+    if !meta.is_rack() || cell.tray != 0 {
+        return false;
+    }
+    let (_, y) = meta.cell_center(cell.r.into(), cell.c.into());
+    slot_of.iter().any(|&(sc, slot)| {
+        box_in_slot(qpos, meta, sc, slot)
+            && meta
+                .derived
+                .exit_slots
+                .get(slot)
+                .is_some_and(|p| (p[1] - y).abs() < BLOCK_DY)
+    })
+}
+
+/// The order to fill exit slots in (row 10.5): on a rack, first the slots
+/// whose boxes would block no bottom-shelf row, then the rest; elsewhere
+/// slot 0 first.
+pub fn slot_order(meta: &SceneMeta) -> Vec<usize> {
+    let n = meta.derived.exit_slots.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    if meta.is_rack() {
+        let blocks = |i: usize| {
+            let y = meta.derived.exit_slots[i][1];
+            (0..meta.cols).any(|c| (meta.cell_center(0, c).1 - y).abs() < BLOCK_DY)
+        };
+        order.sort_by_key(|&i| blocks(i));
+    }
+    order
+}
+
 /// Harvest every cell whose box has risen above [`LIFTED_Z`] (row 8.2) and
 /// return the `BoxLifted` events, once per cell. Shared by the live run
 /// and the replay, so both decide the same way. Boxes come first in qpos,
 /// in the world's (row-major) cell order.
-pub fn harvest_lifted(world: &mut World, qpos: &[f64]) -> Vec<Event> {
+pub fn harvest_lifted(world: &mut World, qpos: &[f64], meta: &SceneMeta) -> Vec<Event> {
     let cells: Vec<CellId> = world.animals().iter().map(|(c, _)| *c).collect();
     cells
         .into_iter()
         .enumerate()
-        .filter(|&(i, _)| qpos.get(7 * i + 2).is_some_and(|z| *z > LIFTED_Z))
+        .filter(|&(i, c)| {
+            // Above its own shelf (row 10.5: a rack's upper boxes rest high).
+            let base = meta.shelf_base(c.tray.into()).unwrap_or(0.0);
+            qpos.get(7 * i + 2).is_some_and(|z| *z > base + LIFTED_Z)
+        })
         .filter_map(|(_, c)| world.harvest(c))
         .collect()
 }
@@ -240,8 +303,13 @@ impl<W: Write> BtHooks<W> {
         let Some(world) = self.world.as_mut() else {
             return 0.0;
         };
-        // A hair past the transition, so it is crossed in this step.
-        let dt = (world.time_to_next_transition() + 1e-6).min(max_dt.max(0.0));
+        // A hair past the transition, so it is crossed in this step. The
+        // exit worker's next clearing counts too (row 10.5).
+        let mut next = world.time_to_next_transition();
+        if let Some(due) = self.worker.next_due() {
+            next = next.min((due - self.bio_time).max(0.0));
+        }
+        let dt = (next + 1e-6).min(max_dt.max(0.0));
         if dt <= 0.0 {
             return 0.0;
         }
@@ -304,6 +372,7 @@ impl<W: Write> Hooks for BtHooks<W> {
         // Row 8.3: what the detector sees, for the tree's `detected` key.
         if let Some(world) = self.world.as_ref() {
             let obs = CellObs::default(); // the oracle reads the world, not the sim
+            let q = sim.qpos();
             let mut cells = Vec::new();
             for (i, (cell, _)) in world.animals().iter().enumerate() {
                 if self.detector.detect(*cell, &obs, world).is_some() {
@@ -312,6 +381,8 @@ impl<W: Write> Hooks for BtHooks<W> {
                         r: cell.r,
                         c: cell.c,
                         closes_in: world.window_left(i).unwrap_or(0.0),
+                        eta: eta(self.crane.targets(), *cell, &self.meta),
+                        blocked: row_blocked(&q, &self.meta, &self.slot_of, *cell),
                     });
                 }
             }
@@ -369,46 +440,67 @@ impl<W: Write> Hooks for BtHooks<W> {
             && !self.crane.has_current()
         {
             self.pending = None;
-            if let Pose::Transfer(r, c) = pose {
+            let job = match pose {
+                Pose::Transfer(r, c) => Some((0, r, c)),
+                Pose::TransferOn(t, r, c) => Some((t, r, c)),
+                _ => None,
+            };
+            if let Some((t, r, c)) = job {
                 // A job, not a place (row 6.5): one Transfer macro, so a
                 // fault can undo it as a whole.
-                // Row 8.4: into the lowest free exit slot, when the scene
-                // has slots; onto the middle of the exit tray otherwise.
-                let slot = match self.slots.as_mut() {
-                    None => Ok(None),
-                    Some(a) => a.take().map(Some).ok_or(()),
+                let cell = CellId {
+                    tray: t as u8,
+                    r: r as u8,
+                    c: c as u8,
                 };
-                let built = slot
-                    .map_err(|()| "every exit slot is full".to_string())
-                    .and_then(|slot| {
-                        mast::Transfer::build_to(self.crane.targets(), r, c, slot, &self.meta)
-                            .map(|t| (t, slot))
+                // Row 10.5: a box waiting in the exit slot in this cell's row
+                // is in the way. Forget the goal for now (the crane stays
+                // idle, so the clock can run to the worker clearing it); the
+                // tree asks again and it is planned once the row is clear.
+                if row_blocked(&sim.qpos(), &self.meta, &self.slot_of, cell) {
+                    self.last_goal = None;
+                } else {
+                    // Row 8.4: into the lowest free exit slot (on the rack, the
+                    // ones that block nothing first), when the scene has slots.
+                    let order = slot_order(&self.meta);
+                    let slot = match self.slots.as_mut() {
+                        None => Ok(None),
+                        Some(a) => a.take_from(&order).map(Some).ok_or(()),
+                    };
+                    let built = slot
+                        .map_err(|()| "every exit slot is full".to_string())
+                        .and_then(|slot| {
+                            mast::Transfer::build_on(
+                                self.crane.targets(),
+                                t,
+                                r,
+                                c,
+                                slot,
+                                &self.meta,
+                            )
+                            .map(|x| (x, slot))
                             .map_err(|e| {
                                 if let (Some(a), Some(i)) = (self.slots.as_mut(), slot) {
                                     a.free(i);
                                 }
                                 e.to_string()
                             })
-                    });
-                match built {
-                    Ok((t, slot)) => {
-                        if let Some(i) = slot {
-                            self.slot_of.push((
-                                CellId {
-                                    tray: 0,
-                                    r: r as u8,
-                                    c: c as u8,
-                                },
-                                i,
-                            ));
+                        });
+                    match built {
+                        Ok((x, slot)) => {
+                            if let Some(i) = slot {
+                                self.slot_of.push((cell, i));
+                            }
+                            let label = match slot {
+                                Some(i) => {
+                                    format!("transfer {} to exit slot {i}", crate::cells::tag(cell))
+                                }
+                                None => format!("transfer {}", crate::cells::tag(cell)),
+                            };
+                            self.crane.enqueue_command(Box::new(x), label);
                         }
-                        let label = match slot {
-                            Some(i) => format!("transfer ({r}, {c}) to exit slot {i}"),
-                            None => format!("transfer ({r}, {c})"),
-                        };
-                        self.crane.enqueue_command(Box::new(t), label);
+                        Err(e) => self.errors.push(format!("route: goal {pose:?}: {e}")),
                     }
-                    Err(e) => self.errors.push(format!("route: goal {pose:?}: {e}")),
                 }
             } else {
                 match route::route(self.crane.targets(), pose, &self.meta) {
@@ -438,7 +530,7 @@ impl<W: Write> Hooks for BtHooks<W> {
         // world publishes BoxLifted once. Any box counts, not only the
         // goal's, so a replay (8.6), which has no goals, decides the same.
         if let Some(world) = self.world.as_mut() {
-            let lifted = harvest_lifted(world, &sim.qpos());
+            let lifted = harvest_lifted(world, &sim.qpos(), &self.meta);
             self.record(lifted);
         }
         // Row 8.6: the block of physics that just ran, for targets.csv.

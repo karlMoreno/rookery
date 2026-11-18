@@ -796,6 +796,14 @@ mod tour_cmd {
             .or_else(|| scenario.as_ref().and_then(|s| s.tree.clone()))
             .ok_or("give --script, --tree, or a --scenario that names a tree")?;
         let tree_path = &tree_owned;
+        // Row 10.5: a scenario may name its own scene (the rack).
+        if let Some(scene) = scenario.as_ref().and_then(|s| s.scene.clone())
+            && args.scene != scene
+        {
+            let mut a = args.clone();
+            a.scene = scene;
+            return tree_run(&a);
+        }
         let meta = SceneMeta::load(args.scene.with_extension("json")).map_err(|e| e.to_string())?;
         let (hooks_meta_rows, hooks_meta_cols) = (meta.rows, meta.cols);
         if let Some(s) = &scenario {
@@ -830,13 +838,7 @@ mod tour_cmd {
             targets: kinematics::home(),
             windows: mast::ShelfWindows::from_meta(&meta).map_err(|e| e.to_string())?,
         };
-        let cells: Vec<rookery_core::CellId> = (0..meta.rows * meta.cols)
-            .map(|i| rookery_core::CellId {
-                tray: 0,
-                r: (i / meta.cols) as u8,
-                c: (i % meta.cols) as u8,
-            })
-            .collect();
+        let cells: Vec<rookery_core::CellId> = rookery::cells::all(&meta);
         let mut world =
             rookery_core::World::new(rookery_core::LifecycleParams::default(), args.seed, &cells);
         let mover = rookery::shells::ShellMover::subscribe(

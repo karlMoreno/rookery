@@ -6,6 +6,7 @@
 //! ci = true                          -- run in CI (scripts/run-scenarios.sh)
 //! tree = "../trees/patrol.lua"       -- relative to this file
 //! ticks = 10000                      -- 50 Hz ticks (200 s of sim time)
+//! scene = "../../scene/generated/rack3.xml"   -- optional (row 10.5); default --scene
 //! function setup(world) end          -- optional; world = { rows, cols }
 //! function check(log)                -- log: see below
 //!   return ok, "message"
@@ -37,6 +38,9 @@ pub struct Scenario {
     pub ticks: Option<u64>,
     /// Whether CI runs it.
     pub ci: bool,
+    /// The scene to run it on, resolved against the scenario's directory
+    /// (row 10.5: `week_3tray.lua` runs on the rack). `None`: `--scene`.
+    pub scene: Option<PathBuf>,
 }
 
 /// What the harness hands to `check(log)`.
@@ -74,6 +78,10 @@ impl Scenario {
             .get::<Option<u64>>("ticks")
             .map_err(|e| format!("{}: ticks: {e}", path.display()))?;
         let ci = g.get::<Option<bool>>("ci").ok().flatten().unwrap_or(false);
+        let scene = g
+            .get::<Option<String>>("scene")
+            .map_err(|e| format!("{}: scene: {e}", path.display()))?
+            .map(|s| base.join(s));
         if g.get::<Option<Function>>("check").ok().flatten().is_none() {
             return Err(format!(
                 "{}: a scenario must define check(log)",
@@ -86,6 +94,7 @@ impl Scenario {
             tree,
             ticks,
             ci,
+            scene,
         })
     }
 

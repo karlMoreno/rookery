@@ -118,11 +118,25 @@ impl Transfer {
                 slots: meta.derived.exit_slots.len(),
             })?,
         };
+        // Before sliding the box out, rise as high as the shelf allows: on
+        // the bottom shelf the box passes over the exit tray's plate, whose
+        // top is level with a just-lifted box's underside (row 10.5).
+        let exit_reach_z = route::window_top(exit.0[Axis::MastZ.index()], meta)
+            .map_or(exit.0[Axis::MastZ.index()], |hi| (hi - route::WINDOW_EPS).max(exit.0[Axis::MastZ.index()]));
+        let lifted = at.0[Axis::MastZ.index()];
+        let clear = route::window_top(lifted, meta)
+            .map_or(lifted, |hi| (hi - route::WINDOW_EPS).max(lifted));
         let carry = vec![
+            MoveCommand::new(Axis::MastZ, clear),
             MoveCommand::new(Axis::ArmX, 0.0).with_speed(CARRY_SPEED),
-            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]).with_speed(CARRY_SPEED),
+            // Reach over the slot as high as shelf 0's window allows: a
+            // hanging box sits about 2 cm lower on the hook than a resting
+            // one, so at the exit's engage height it would strike the plate's
+            // edge. Then set it down.
+            MoveCommand::new(Axis::MastZ, exit_reach_z).with_speed(CARRY_SPEED),
             MoveCommand::new(Axis::RailY, exit.0[Axis::RailY.index()]).with_speed(CARRY_SPEED),
             MoveCommand::new(Axis::ArmX, exit.0[Axis::ArmX.index()]).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]),
             MoveCommand::new(Axis::HookLift, 0.0).with_speed(crate::lift::ENGAGE_SPEED),
         ];
         push(&mut steps, carry, &mut at);
@@ -222,6 +236,17 @@ impl SlotAllocator {
     /// The lowest free slot, now taken, or `None` when the tray is full.
     pub fn take(&mut self) -> Option<usize> {
         let i = self.taken.iter().position(|t| !t)?;
+        self.taken[i] = true;
+        Some(i)
+    }
+
+    /// The first free slot in `order` (row 10.5: the rack fills the slots
+    /// that block nothing first), now taken, or `None`.
+    pub fn take_from(&mut self, order: &[usize]) -> Option<usize> {
+        let i = order
+            .iter()
+            .copied()
+            .find(|&i| self.taken.get(i) == Some(&false))?;
         self.taken[i] = true;
         Some(i)
     }

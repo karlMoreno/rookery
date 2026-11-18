@@ -379,12 +379,7 @@ fn a_leaf_reads_the_detected_cells_soonest_first() {
     let mut tree = load(&d, r#"return Leaf("pick.lua")"#);
     let (mut bb, s) = board();
     assert_eq!(tree.tick(&mut bb), Status::Failure, "nothing detected yet");
-    let cell = |r, c, closes_in| BbDetected {
-        tray: 0,
-        r,
-        c,
-        closes_in,
-    };
+    let cell = |r, c, closes_in| BbDetected { tray: 0, r, c, closes_in, eta: 30.0, blocked: false };
     s.write_detected(
         &mut bb,
         vec![cell(3, 3, 7200.0), cell(1, 2, 600.0), cell(0, 1, 3600.0)],

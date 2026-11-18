@@ -61,8 +61,9 @@ use mast::route::Pose;
 use mlua::Lua;
 
 /// Bumped on any change to [`BbSchema`]'s keys or types.
-/// Version 2 (row 7.5) adds `events`; version 3 (row 8.3) adds `detected`.
-pub const SCHEMA_VERSION: u32 = 3;
+/// Version 2 (row 7.5) adds `events`; version 3 (row 8.3) adds `detected`;
+/// version 4 (row 10.5) adds `eta` and `blocked` to each detected cell.
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// How many recent events the `events` key keeps. Older ones drop off the
 /// front; a leaf that needs every event remembers the last `seq` it saw.
@@ -382,6 +383,13 @@ pub struct BbDetected {
     pub c: u8,
     /// Seconds of biological time until its soft-shell window closes.
     pub closes_in: f64,
+    /// Seconds the crane needs to reach it from where it is now (row 10.5),
+    /// worked out in Rust from `MAX_VEL`, so Lua never reads the limits.
+    pub eta: f64,
+    /// The crane can't reach it right now (row 10.5): on the rack's bottom
+    /// shelf, a box waiting in the exit slot in its row is in the way until
+    /// the worker clears it.
+    pub blocked: bool,
 }
 
 impl BbSchema {
