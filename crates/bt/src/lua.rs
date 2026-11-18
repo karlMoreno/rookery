@@ -52,6 +52,7 @@ function Home() return { pose = "Home" } end
 function Exit() return { pose = "Exit" } end
 function Cell(r, c) return { pose = "Cell", r = r, c = c } end
 function Transfer(r, c) return { pose = "Transfer", r = r, c = c } end
+function ExitSlot(i) return { pose = "ExitSlot", i = i } end
 "#;
 
 /// Load `path` as a tree file and build its nodes.
@@ -384,6 +385,10 @@ fn pose_to_lua(lua: &Lua, p: Option<Pose>) -> mlua::Result<Value> {
     match p {
         Pose::Home => t.set("pose", "Home")?,
         Pose::Exit => t.set("pose", "Exit")?,
+        Pose::ExitSlot(i) => {
+            t.set("pose", "ExitSlot")?;
+            t.set("i", i)?;
+        }
         Pose::Cell(r, c) => {
             t.set("pose", "Cell")?;
             t.set("r", r)?;
@@ -401,7 +406,7 @@ fn pose_to_lua(lua: &Lua, p: Option<Pose>) -> mlua::Result<Value> {
 fn pose_from_lua(v: &Value) -> Result<Pose, String> {
     let bad = || {
         format!(
-            "bb:go_to expects Home(), Exit(), Cell(r, c) or Transfer(r, c), got {}",
+            "bb:go_to expects Home(), Exit(), ExitSlot(i), Cell(r, c) or Transfer(r, c), got {}",
             v.type_name()
         )
     };
@@ -412,6 +417,14 @@ fn pose_from_lua(v: &Value) -> Result<Pose, String> {
     match kind.as_str() {
         "Home" => Ok(Pose::Home),
         "Exit" => Ok(Pose::Exit),
+        "ExitSlot" => {
+            let n: i64 = t
+                .get("i")
+                .map_err(|_| "ExitSlot needs integer i".to_string())?;
+            usize::try_from(n)
+                .map(Pose::ExitSlot)
+                .map_err(|_| format!("ExitSlot i must be ≥ 0, got {n}"))
+        }
         "Cell" | "Transfer" => {
             let idx = |k: &str| -> Result<usize, String> {
                 let n: i64 = t.get(k).map_err(|_| format!("{kind} needs integer {k}"))?;

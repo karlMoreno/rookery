@@ -74,6 +74,10 @@ pub struct Derived {
     pub exit_pose: [f64; 3],
     /// X of the floor rail.
     pub rail_line_x: f64,
+    /// Where a box sits in each exit slot (row 8.4), slot 0 first. Empty in
+    /// a scene from before slots, which then has only `exit_pose`.
+    #[serde(default)]
+    pub exit_slots: Vec<[f64; 3]>,
 }
 
 /// Why scene metadata could not be read.
@@ -149,6 +153,13 @@ pub fn cell_pose(r: usize, c: usize, meta: &SceneMeta) -> Option<JointTargets> {
 pub fn exit_pose(meta: &SceneMeta) -> JointTargets {
     let [x, y, z] = meta.derived.exit_pose;
     JointTargets([y, meta.engage_z(z), meta.arm_for(x), 0.0])
+}
+
+/// Engage pose under the handle of a box in exit slot `i` (row 8.4), or
+/// `None` when the scene has no such slot.
+pub fn exit_slot_pose(i: usize, meta: &SceneMeta) -> Option<JointTargets> {
+    let [x, y, z] = *meta.derived.exit_slots.get(i)?;
+    Some(JointTargets([y, meta.engage_z(z), meta.arm_for(x), 0.0]))
 }
 
 /// Shelf windows for the scene: the mast heights at which the arm may

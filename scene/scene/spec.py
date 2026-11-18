@@ -57,6 +57,13 @@ GROUND_Z = -0.01
 #: Room the J-hook needs above and below its envelope under a handle, metres.
 MIN_HOOK_CLEARANCE = 0.004
 
+#: How far the crane's truck travels along Y either side of centre, metres:
+#: ``rail_y`` in ``crates/mast/src/limits.rs``, mirrored in builder.GANTRY_RANGES
+#: (a test checks all three agree). Every exit slot must be inside it.
+RAIL_Y_REACH = 0.40
+#: The most exit slots the automatic placement makes.
+MAX_EXIT_SLOTS = 6
+
 #: Default height of the exit tray's top surface, in metres.
 EXIT_TRAY_Z = 0.10
 #: Default distance from the exit tray's aisle edge to the floor rail, in metres.
@@ -169,6 +176,13 @@ class SceneSpec:
     #: tray's aisle edge, at y = 0, z = ``EXIT_TRAY_Z``. Read the resolved
     #: value from ``exit_pose``.
     exit_tray_pose: tuple[float, float, float] | None = None
+    #: Box places on the exit tray (row 8.4), one cell pitch apart along Y
+    #: and centred on ``exit_pose``. 0 keeps the Phase 6 one-box tray.
+    #: ``None`` (the default) fits as many as the rail reaches, up to
+    #: ``MAX_EXIT_SLOTS``: 6 at the default pitch, at y = ±0.075, ±0.225,
+    #: ±0.375. Read the resolved count from ``n_exit_slots`` and the poses
+    #: from ``exit_slot_poses``.
+    exit_slots: int | None = None
     #: X of the crane's floor rail, which runs along Y on the aisle side. The
     #: stacker crane (Phase 3) rides it. ``None`` puts it ``RAIL_SETBACK``
     #: beyond the exit tray. Read the resolved value from ``rail_line_x``.
@@ -229,6 +243,37 @@ class SceneSpec:
     def exit_tray_half(self) -> float:
         """Half-side of the square exit tray: one cell, so it holds one box."""
         return self.cell_pitch / 2
+
+    @property
+    def n_exit_slots(self) -> int:
+        """Resolved slot count: ``exit_slots``, or the most (up to
+        ``MAX_EXIT_SLOTS``) whose outer slot the rail reaches and whose plate
+        stays within the rail's length."""
+        if self.exit_slots is not None:
+            return self.exit_slots
+        y0, p = self.exit_pose[1], self.cell_pitch
+        for n in range(MAX_EXIT_SLOTS, 0, -1):
+            if abs(y0) + (n - 1) / 2 * p <= RAIL_Y_REACH + EPS and abs(y0) + n * p / 2 <= self.rail_length / 2 + EPS:
+                return n
+        return 0
+
+    @property
+    def exit_tray_half_y(self) -> float:
+        """Half-length of the exit tray along Y: a cell, or the row of slots."""
+        if self.n_exit_slots:
+            return self.n_exit_slots * self.cell_pitch / 2
+        return self.exit_tray_half
+
+    @property
+    def exit_slot_poses(self) -> list[tuple[float, float, float]]:
+        """Where a box sits in each exit slot (row 8.4): (x, y, z) of the tray
+        top under the box's centre. Slot 0 is the one nearest the middle, then
+        outwards, -Y before +Y, so the lowest free slot means the shortest carry."""
+        x, y0, z = self.exit_pose
+        n = self.n_exit_slots
+        ys = [round(y0 + (i - (n - 1) / 2) * self.cell_pitch, 9) for i in range(n)]
+        ys.sort(key=lambda y: (round(abs(y - y0), 9), y))
+        return [(x, y, z) for y in ys]
 
     @property
     def rail_length(self) -> float:
@@ -368,8 +413,17 @@ class SceneSpec:
                     f"rail_x {self.rail_line_x:.3f} must be on the aisle side of the exit tray "
                     f"(x < {ex - half - CLEARANCE:.3f})"
                 )
-            if abs(ey) + half > self.rail_length / 2 + EPS:
+            ok_n = self.exit_slots is None or (isinstance(self.exit_slots, int) and not isinstance(self.exit_slots, bool) and self.exit_slots >= 0)
+            if ok_n and abs(ey) + self.exit_tray_half_y > self.rail_length / 2 + EPS:
                 p.append(f"exit tray y {ey:.3f} is beyond the rail's reach (±{self.rail_length / 2:.3f})")
+            n = self.exit_slots
+            if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
+                p.append(f"exit_slots must be a whole number >= 0, got {n!r}")
+            elif self.n_exit_slots and max(abs(y) for _, y, _ in self.exit_slot_poses) > RAIL_Y_REACH + EPS:
+                p.append(
+                    f"{self.n_exit_slots} exit slots reach y = ±{max(abs(y) for _, y, _ in self.exit_slot_poses):.3f}, "
+                    f"beyond the crane's ±{RAIL_Y_REACH:.2f} m of rail travel"
+                )
             if ez <= 0:
                 p.append(f"exit tray z {ez:.3f} must be above the tray floor (z > 0)")
             tallest = max(self.handle_top_z, ez + self.handle_top_z)

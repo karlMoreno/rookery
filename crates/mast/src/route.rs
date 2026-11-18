@@ -39,6 +39,8 @@ pub enum Pose {
     Cell(usize, usize),
     /// Engaged under the handle of a box on the exit tray.
     Exit,
+    /// Engaged under the handle of a box in exit slot `i` (row 8.4).
+    ExitSlot(usize),
     /// Not a place but a job (row 6.5): move the box in cell (row, col) to
     /// the exit tray and return home. `route` refuses it, and the crane
     /// player runs `Transfer::build` instead.
@@ -57,6 +59,8 @@ pub enum RouteError {
     },
     /// The pose is a job, not a place to route to (`Pose::Transfer`).
     NotARoute(Pose),
+    /// The scene has no exit slot `slot` (it has `slots`).
+    NoSuchSlot { slot: usize, slots: usize },
 }
 
 impl std::fmt::Display for RouteError {
@@ -66,6 +70,12 @@ impl std::fmt::Display for RouteError {
                 write!(f, "Cell({r}, {c}) is outside the {rows}x{cols} grid")
             }
             Self::NotARoute(p) => write!(f, "{p:?} is a job, not a place to route to"),
+            Self::NoSuchSlot { slot, slots } => {
+                write!(
+                    f,
+                    "ExitSlot({slot}) does not exist; the scene has {slots} exit slot(s)"
+                )
+            }
         }
     }
 }
@@ -147,6 +157,12 @@ impl Plan {
                 })?
             }
             Pose::Exit => kinematics::exit_pose(meta),
+            Pose::ExitSlot(i) => {
+                kinematics::exit_slot_pose(i, meta).ok_or(RouteError::NoSuchSlot {
+                    slot: i,
+                    slots: meta.derived.exit_slots.len(),
+                })?
+            }
         };
         let [y, z, x, _] = target.0;
         self.go(Axis::MastZ, travel);

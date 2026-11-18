@@ -134,6 +134,11 @@ impl Scenario {
                     Value::Table(lua.create_sequence_from([r, c])?)
                 }
                 Pose::Exit => Value::String(lua.create_string("exit")?),
+                Pose::ExitSlot(i) => {
+                    let t = lua.create_table()?;
+                    t.set("exit_slot", i)?;
+                    Value::Table(t)
+                }
                 Pose::Transfer(r, c) => {
                     let t = lua.create_table()?;
                     t.set("transfer", lua.create_sequence_from([r, c])?)?;

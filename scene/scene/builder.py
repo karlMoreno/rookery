@@ -379,20 +379,34 @@ class MjcfBuilder:
         return self
 
     def exit_tray(self) -> MjcfBuilder:
-        """Geom ``exit_tray``: a square plate (one cell) whose top is at ``spec.exit_pose``,
-        on a leg down to the ground. Static, so it is part of the world body."""
+        """Geom ``exit_tray``: a plate whose top centre is at ``spec.exit_pose``,
+        on legs down to the ground. Static, so it is part of the world body.
+
+        With ``exit_slots`` (row 8.4) the plate is a row of slots along Y, one
+        cell pitch each, so several harvested boxes can wait side by side:
+
+        ```text
+          rail ─── │ slot 4 │ slot 2 │ slot 0 │ slot 1 │ slot 3 │ slot 5 │   y →
+                   -0.375   -0.225   -0.075   +0.075   +0.225   +0.375
+        ```
+
+        With no slots it is the Phase 6 one-cell plate on one leg.
+        """
         s = self.spec
         x, y, z = s.exit_pose
-        half = s.exit_tray_half
+        half, half_y = s.exit_tray_half, s.exit_tray_half_y
         t = TRAY_WALL
         rgba = ("rgba", num(*EXIT_RGBA))
         self._el(self.worldbody, "geom", [("name", "exit_tray"), ("type", "box"),
-                                          ("size", num(half, half, t / 2)), ("pos", num(x, y, z - t / 2)), rgba])
+                                          ("size", num(half, half_y, t / 2)), ("pos", num(x, y, z - t / 2)), rgba])
         leg_bottom = -TRAY_WALL  # the ground plane
         leg_half = (z - t - leg_bottom) / 2
-        self._el(self.worldbody, "geom", [("name", "exit_tray_leg"), ("type", "cylinder"),
-                                          ("size", num(0.015, leg_half)), ("pos", num(x, y, leg_bottom + leg_half)),
-                                          rgba])
+        legs = [("exit_tray_leg", y)] if not s.n_exit_slots else [
+            ("exit_tray_leg", y - half_y + half), ("exit_tray_leg_2", y + half_y - half)]
+        for name, ly in legs:
+            self._el(self.worldbody, "geom", [("name", name), ("type", "cylinder"),
+                                              ("size", num(0.015, leg_half)), ("pos", num(x, ly, leg_bottom + leg_half)),
+                                              rgba])
         return self
 
     def crane_frame(self) -> MjcfBuilder:
@@ -556,7 +570,8 @@ def spec_json(spec: SceneSpec) -> str:
     read scene metadata later. Keys are sorted and indented, with a trailing newline."""
     data = asdict(spec)
     # Resolved placements, so a reader never has to re-derive the defaults.
-    data["derived"] = {"exit_pose": list(spec.exit_pose), "rail_line_x": spec.rail_line_x}
+    data["derived"] = {"exit_pose": list(spec.exit_pose), "rail_line_x": spec.rail_line_x,
+                       "exit_slots": [list(p) for p in spec.exit_slot_poses]}
     return json.dumps(data, sort_keys=True, indent=2) + "\n"
 
 

@@ -331,6 +331,33 @@ fn a_leaf_reads_recent_events_and_cannot_write_them() {
 }
 
 #[test]
+fn a_leaf_can_send_the_crane_to_an_exit_slot() {
+    // Row 8.4.
+    let d = dir("exitslot");
+    write(
+        &d,
+        "s.lua",
+        r#"function tick(bb) bb:go_to(ExitSlot(3)) return "running" end"#,
+    );
+    write(
+        &d,
+        "bad.lua",
+        r#"function tick(bb) bb:go_to(ExitSlot(-1)) return "running" end"#,
+    );
+    let mut tree = load(&d, r#"return Leaf("s.lua")"#);
+    let (mut bb, s) = board();
+    tree.tick(&mut bb);
+    assert_eq!(bb.get(&s.gantry_goal), Some(&Some(Pose::ExitSlot(3))));
+    let mut bad = load(&d, r#"return Leaf("bad.lua")"#);
+    assert_eq!(bad.tick(&mut bb), Status::Failure);
+    assert!(
+        bad.take_errors()[0]
+            .message
+            .contains("ExitSlot i must be ≥ 0")
+    );
+}
+
+#[test]
 fn a_leaf_reads_the_detected_cells_soonest_first() {
     // Row 8.3: a synthetic detection reaches Lua, sorted, read-only.
     let d = dir("detected");

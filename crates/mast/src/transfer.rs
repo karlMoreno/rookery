@@ -1,4 +1,4 @@
-//! A full transfer, cell to exit tray (Phase 6).
+//! A full transfer, cell to exit tray (Phase 6), or into an exit slot (8.4).
 //!
 //! Row 6.1 declares this surface over `todo!()`; rows 6.2, 6.3 and 6.6 fill
 //! it in. The Phase 6 gate (`tests/gates/tests/phase6_transfer.rs`) is
@@ -43,6 +43,22 @@ impl Transfer {
         c: usize,
         meta: &SceneMeta,
     ) -> Result<MacroCommand, RouteError> {
+        Self::build_to(from, r, c, None, meta)
+    }
+
+    /// The same transfer into exit slot `slot` (row 8.4), or onto the middle
+    /// of the exit tray with `None`.
+    ///
+    /// # Errors
+    /// [`RouteError::NoSuchCell`] for a cell outside the grid and
+    /// [`RouteError::NoSuchSlot`] for a slot the scene doesn't have.
+    pub fn build_to(
+        from: JointTargets,
+        r: usize,
+        c: usize,
+        slot: Option<usize>,
+        meta: &SceneMeta,
+    ) -> Result<MacroCommand, RouteError> {
         let mut steps: Vec<Box<dyn Command>> = Vec::new();
         let mut at = from;
         let push =
@@ -66,7 +82,13 @@ impl Transfer {
         //    the exit tray. The box hangs about 9 cm below the hook, and at
         //    travel height its underside clears every handle and the exit
         //    tray. The rail only moves with the arm retracted (6.3).
-        let exit = kinematics::exit_pose(meta);
+        let exit = match slot {
+            None => kinematics::exit_pose(meta),
+            Some(i) => kinematics::exit_slot_pose(i, meta).ok_or(RouteError::NoSuchSlot {
+                slot: i,
+                slots: meta.derived.exit_slots.len(),
+            })?,
+        };
         let travel = travel_z(meta);
         let carry = vec![
             MoveCommand::new(Axis::MastZ, travel.max(at.0[Axis::MastZ.index()])),
@@ -87,5 +109,51 @@ impl Transfer {
         let home = route::route(at, Pose::Home, meta)?;
         push(&mut steps, home, &mut at);
         Ok(MacroCommand::new(steps))
+    }
+}
+
+/// Hands out exit slots (row 8.4): the lowest free one, so boxes fill from
+/// the middle of the exit tray outwards. `free` returns a slot when its box
+/// has been harvested from the tray (or a transfer into it was undone).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotAllocator {
+    taken: Vec<bool>,
+}
+
+impl SlotAllocator {
+    /// `n` free slots.
+    pub fn new(n: usize) -> Self {
+        Self {
+            taken: vec![false; n],
+        }
+    }
+
+    /// The lowest free slot, now taken, or `None` when the tray is full.
+    pub fn take(&mut self) -> Option<usize> {
+        let i = self.taken.iter().position(|t| !t)?;
+        self.taken[i] = true;
+        Some(i)
+    }
+
+    /// Give slot `i` back. Freeing a free or unknown slot does nothing.
+    pub fn free(&mut self, i: usize) {
+        if let Some(t) = self.taken.get_mut(i) {
+            *t = false;
+        }
+    }
+
+    /// Slots in use.
+    pub fn in_use(&self) -> usize {
+        self.taken.iter().filter(|t| **t).count()
+    }
+
+    /// Slots in all.
+    pub fn len(&self) -> usize {
+        self.taken.len()
+    }
+
+    /// Whether there are no slots at all.
+    pub fn is_empty(&self) -> bool {
+        self.taken.is_empty()
     }
 }
