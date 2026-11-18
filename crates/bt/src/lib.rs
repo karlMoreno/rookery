@@ -23,7 +23,7 @@
 //!   (memory)  (memory)  {succ, fail thr}   decorators            tick(bb) in Lua
 //!
 //!   Tree ── root: Box<dyn Node> ── load(tree.lua, &Lua) / tick(&mut Blackboard)
-//!   Blackboard ── BbKey<T> ── BbSchema { sim_time, gantry_q, gantry_target, route_len, gantry_goal, events }
+//!   Blackboard ── BbKey<T> ── BbSchema { sim_time, gantry_q, gantry_target, route_len, gantry_goal, events, detected }
 //! ```
 //!
 //! ## Tree files (contract fixed in 4.1)
@@ -61,8 +61,8 @@ use mast::route::Pose;
 use mlua::Lua;
 
 /// Bumped on any change to [`BbSchema`]'s keys or types.
-/// Version 2 (row 7.5) adds `events`.
-pub const SCHEMA_VERSION: u32 = 2;
+/// Version 2 (row 7.5) adds `events`; version 3 (row 8.3) adds `detected`.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// How many recent events the `events` key keeps. Older ones drop off the
 /// front; a leaf that needs every event remembers the last `seq` it saw.
@@ -297,6 +297,10 @@ pub struct BbSchema {
     /// The last [`EVENTS_KEPT`] lifecycle events, oldest first (row 7.5).
     /// Rust appends with [`BbSchema::push_event`]; Lua only reads them.
     pub events: BbKey<std::collections::VecDeque<BbEvent>>,
+    /// The cells the molt detector sees right now, soonest-closing window
+    /// first (row 8.3). Rust rewrites it every tick; Lua only reads it, so a
+    /// leaf never has to consume anything.
+    pub detected: BbKey<Vec<BbDetected>>,
 }
 
 impl BbSchema {
@@ -310,10 +314,12 @@ impl BbSchema {
             route_len: bb.register("route_len"),
             gantry_goal: bb.register("gantry_goal"),
             events: bb.register("events"),
+            detected: bb.register("detected"),
         };
         bb.set(&schema.gantry_goal, None);
         bb.set(&schema.route_len, 0);
         bb.set(&schema.events, std::collections::VecDeque::new());
+        bb.set(&schema.detected, Vec::new());
         schema
     }
 
@@ -366,6 +372,29 @@ pub struct BbEvent {
     pub tray: u8,
     pub r: u8,
     pub c: u8,
+}
+
+/// A cell the molt detector sees (row 8.3), as a tree sees it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BbDetected {
+    pub tray: u8,
+    pub r: u8,
+    pub c: u8,
+    /// Seconds of biological time until its soft-shell window closes.
+    pub closes_in: f64,
+}
+
+impl BbSchema {
+    /// Replace `detected` with `cells`, sorted soonest-closing first (ties by
+    /// tray, row, column, so the order never depends on the caller's).
+    pub fn write_detected(&self, bb: &mut Blackboard, mut cells: Vec<BbDetected>) {
+        cells.sort_by(|a, b| {
+            a.closes_in
+                .total_cmp(&b.closes_in)
+                .then((a.tray, a.r, a.c).cmp(&(b.tray, b.r, b.c)))
+        });
+        bb.set(&self.detected, cells);
+    }
 }
 
 /// A leaf's failure, kept for the run log and the Phase 4 gate.
