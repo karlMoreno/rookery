@@ -49,6 +49,15 @@ impl ExitWorker {
         }
     }
 
+    /// When the next box is due to be cleared, if any (row 10.5: the clock
+    /// stops for it, so a row it blocks is free again on time).
+    pub fn next_due(&self) -> Option<f64> {
+        self.due
+            .iter()
+            .map(|(_, d)| *d)
+            .fold(None, |m, d| Some(m.map_or(d, |m: f64| m.min(d))))
+    }
+
     /// The cells whose boxes [`ExitWorker::apply`] would clear at time `t`.
     pub fn due_now(&self, t: f64) -> Vec<CellId> {
         self.due
@@ -73,7 +82,7 @@ impl ExitWorker {
                 -0.3 + BASKET_PITCH * (k / 4.0).floor(),
                 BASKET_Z,
             ];
-            let tag = format!("{}_{}", cell.r, cell.c);
+            let tag = crate::cells::tag(cell);
             let snap = sim.snapshot();
             let Some(b) = sim.body_index(&format!("box_{tag}")) else {
                 continue;

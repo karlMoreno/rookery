@@ -95,13 +95,7 @@ pub fn run(args: &AutonomyArgs) -> Result<AutonomyReport, String> {
         }
         None => Box::new(std::io::sink()),
     };
-    let cells: Vec<CellId> = (0..meta.rows * meta.cols)
-        .map(|i| CellId {
-            tray: 0,
-            r: (i / meta.cols) as u8,
-            c: (i % meta.cols) as u8,
-        })
-        .collect();
+    let cells: Vec<CellId> = crate::cells::all(&meta);
     let mut world = World::new(LifecycleParams::default(), args.seed, &cells);
     let mover = ShellMover::subscribe(&sim, &meta_path, &meta, &mut world)?;
     // Row 10.3: the windows come from the scene and are checked at start-up.

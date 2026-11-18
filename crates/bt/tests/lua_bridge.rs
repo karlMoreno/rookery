@@ -384,6 +384,8 @@ fn a_leaf_reads_the_detected_cells_soonest_first() {
         r,
         c,
         closes_in,
+        eta: 30.0,
+        blocked: false,
     };
     s.write_detected(
         &mut bb,

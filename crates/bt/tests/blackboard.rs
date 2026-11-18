@@ -76,7 +76,7 @@ fn the_schema_registers_every_key_with_defaults() {
     assert_eq!(bb.get(&s.gantry_goal), Some(&None));
     assert!(bb.get(&s.events).is_some_and(|q| q.is_empty()));
     assert_eq!(bb.get(&s.route_len), Some(&0));
-    assert_eq!(SCHEMA_VERSION, 3);
+    assert_eq!(SCHEMA_VERSION, 4);
 }
 
 #[test]

@@ -67,8 +67,8 @@ pub struct ShellCheck {
 /// Moves shed shells between their park spots and their boxes.
 pub struct ShellMover {
     inbox: Rc<RefCell<Vec<Event>>>,
-    cols: usize,
-    /// Each cell's parked pose (position, quaternion), row-major.
+    meta: SceneMeta,
+    /// Each cell's parked pose (position, quaternion), in `cells::all` order.
     parked: Vec<([f64; 3], [f64; 4])>,
     /// The shell's rest position in its box's frame.
     in_box: [f64; 3],
@@ -103,10 +103,10 @@ impl ShellMover {
         // The builder emits the free joints as boxes, crawfish, then shells,
         // each block row-major with 7 values per body, and the crane last.
         let q = sim.qpos();
-        let cells = meta.rows * meta.cols;
+        let cells = crate::cells::count(meta);
         let mut parked = Vec::with_capacity(cells);
-        for k in 0..cells {
-            let name = shell_name(k / meta.cols, k % meta.cols);
+        for (k, cell) in crate::cells::all(meta).into_iter().enumerate() {
+            let name = shell_name(cell);
             let i = 7 * (2 * cells + k);
             let b = q.get(i..i + 7).filter(|_| sim.body_index(&name).is_some());
             // A parked shell is below the ground; anything else means the
@@ -128,7 +128,7 @@ impl ShellMover {
         }));
         Ok(Some(ShellMover {
             inbox,
-            cols: meta.cols,
+            meta: meta.clone(),
             parked,
             in_box: [0.0, spec.shell_offset_y, BOX_FLOOR + spec.shell_radius],
             inner_half: meta.box_size[0].min(meta.box_size[1]) / 2.0 - BOX_WALL,
@@ -147,7 +147,7 @@ impl ShellMover {
         let snap = sim.snapshot();
         for (cell, t) in std::mem::take(&mut self.to_check) {
             let (Some(s), Some(b)) = (
-                sim.body_index(&shell_name(cell.r.into(), cell.c.into())),
+                sim.body_index(&shell_name(cell)),
                 sim.body_index(&box_name(cell)),
             ) else {
                 continue;
@@ -174,8 +174,7 @@ impl ShellMover {
                 Event::ShellEaten(c) => (c, false),
                 _ => continue,
             };
-            let (r, c) = (usize::from(cell.r), usize::from(cell.c));
-            let name = shell_name(r, c);
+            let name = shell_name(cell);
             let result = if into_box {
                 // Pose from the box's current pose: snapshot xpos lags qpos by
                 // a step, so read the box's free joint from qpos.
@@ -195,7 +194,7 @@ impl ShellMover {
                     }
                 }
             } else {
-                let (pos, q) = self.parked[r * self.cols + c];
+                let (pos, q) = self.parked[crate::cells::index(&self.meta, cell)];
                 sim.set_gravcomp(&name, 1.0)
                     .and_then(|()| sim.set_body_pose(&name, pos, q))
             };
@@ -208,20 +207,20 @@ impl ShellMover {
 
     /// The box's position and orientation, read from its free joint.
     fn box_pose(&self, sim: &Sim, cell: CellId) -> Option<([f64; 3], [f64; 4])> {
-        // Boxes come first in qpos, row-major, 7 values each.
-        let i = 7 * (usize::from(cell.r) * self.cols + usize::from(cell.c));
+        // Boxes come first in qpos, in cells::all order, 7 values each.
+        let i = 7 * crate::cells::index(&self.meta, cell);
         let q = sim.qpos();
         let b = q.get(i..i + 7)?;
         Some(([b[0], b[1], b[2]], [b[3], b[4], b[5], b[6]]))
     }
 }
 
-fn shell_name(r: usize, c: usize) -> String {
-    format!("shell_{r}_{c}")
+fn shell_name(cell: CellId) -> String {
+    format!("shell_{}", crate::cells::tag(cell))
 }
 
 fn box_name(cell: CellId) -> String {
-    format!("box_{}_{}", cell.r, cell.c)
+    format!("box_{}", crate::cells::tag(cell))
 }
 
 fn add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
