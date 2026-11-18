@@ -204,6 +204,7 @@ mod tests {
             fault_at: None,
             seed: 7,
             max_physics: 900.0,
+            config: None,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -388,6 +389,7 @@ mod tests {
             fault_at: None,
             seed: 7,
             max_physics: 900.0,
+            config: None,
         };
         tour_cmd::run(&args).expect("the run");
         let run = dir.join("r");
@@ -431,6 +433,7 @@ mod tests {
             fault_at: None,
             seed: 7,
             max_physics: 900.0,
+            config: None,
         };
         let t0 = std::time::Instant::now();
         tour_cmd::run(&args).expect("week runs");
@@ -600,8 +603,12 @@ mod tour_cmd {
     /// runs cheap), seconds: one year.
     const MAX_BIO_SECONDS: f64 = 366.0 * 86_400.0;
 
-    #[derive(Debug, clap::Args)]
+    #[derive(Debug, Clone, clap::Args)]
     pub struct RunArgs {
+        /// rookery.toml (row 10.4): its scene, seed and max_physics replace
+        /// --scene, --seed and --max-physics, after it is checked against the scene
+        #[arg(long)]
+        pub config: Option<PathBuf>,
         /// Tour script (RON), e.g. examples/tour.ron
         #[arg(long, conflicts_with_all = ["tree", "scenario"], required_unless_present_any = ["tree", "scenario"])]
         pub script: Option<PathBuf>,
@@ -640,6 +647,16 @@ mod tour_cmd {
     }
 
     pub fn run(args: &RunArgs) -> Result<String, String> {
+        if let Some(path) = &args.config {
+            let cfg = rookery::config::Config::load(path)?;
+            cfg.validate()?;
+            let mut a = args.clone();
+            a.config = None;
+            a.scene = cfg.scene;
+            a.seed = cfg.seed;
+            a.max_physics = cfg.max_physics;
+            return run(&a);
+        }
         let Some(script_path) = &args.script else {
             return tree_run(args);
         };

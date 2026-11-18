@@ -5,6 +5,7 @@
 //!   main.rs (CLI: summarise, run --script/--tree/--scenario, lift)
 //!      │ uses
 //!   lib.rs ── autonomy unattended runs: the Phase 8 gate's entry point
+//!          ── config   rookery.toml: which farm to run (10.4)
 //!          ── runner   Template Method: physics at 1 kHz, hooks at 50 Hz
 //!          ── crane    MoveCommand player, sim → GantryObs, qpos log
 //!          ── bt_hooks the behavior tree drives the crane through goals
@@ -19,6 +20,7 @@
 
 pub mod autonomy;
 pub mod bt_hooks;
+pub mod config;
 pub mod crane;
 pub mod exit_worker;
 pub mod lift_trials;
