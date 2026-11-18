@@ -61,6 +61,21 @@ MIN_HOOK_CLEARANCE = 0.004
 #: ``rail_y`` in ``crates/mast/src/limits.rs``, mirrored in builder.GANTRY_RANGES
 #: (a test checks all three agree). Every exit slot must be inside it.
 RAIL_Y_REACH = 0.40
+#: Stacked trays (Phase 10): the smallest clear gap between a tray's handle
+#: tops and the floor of the tray above. A lift raises a box about 10 cm
+#: (2 cm hook, 8 cm mast), so 13 cm leaves 3 cm. Today's default (8 cm) only
+#: suits one tray.
+MIN_STACKED_SHELF_GAP = 0.13
+#: The mast's top, mirrored from limits.rs MAST_Z (and builder.GANTRY_RANGES),
+#: and how far above a box's floor the hook sits when engaged plus the lift.
+#: The top shelf's box must still be liftable under it.
+MAST_Z_TOP = 0.80
+ENGAGE_PLUS_LIFT = 0.08 + 0.01 + 0.10
+#: Tray floor thickness, mirrored from builder.TRAY_WALL.
+TRAY_FLOOR_FOR_SPEC = 0.01
+#: Tray wall height above the water, mirrored from builder.TRAY_FREEBOARD.
+TRAY_FREEBOARD_FOR_SPEC = 0.03
+
 #: The most exit slots the automatic placement makes.
 MAX_EXIT_SLOTS = 6
 
@@ -295,6 +310,27 @@ class SceneSpec:
         x, y = self.cell_center(r, c)
         return (x, y, self.shell_park_z + self.shell_radius + SHELL_HOVER)
 
+    def grid(self) -> list[tuple[int, int]]:
+        """Every (row, col) of one tray, row-major."""
+        return [(r, c) for r in range(self.rows) for c in range(self.cols)]
+
+    def cell_tag(self, t: int, r: int, c: int) -> str:
+        """The name suffix of cell (t, r, c): ``r_c`` on tray 0, so a one-tray
+        scene keeps the names every gate uses, and ``t_r_c`` above it
+        (Phase 10)."""
+        return f"{r}_{c}" if t == 0 else f"{t}_{r}_{c}"
+
+    @property
+    def shelf_pitch(self) -> float:
+        """Height from one tray's floor top to the next one's (Phase 10): the
+        floor, the taller of the tray walls and the box handles, and the gap."""
+        tallest = max(self.water_depth + TRAY_FREEBOARD_FOR_SPEC, self.handle_top_z)
+        return TRAY_FLOOR_FOR_SPEC + tallest + self.shelf_gap
+
+    def shelf_base_z(self, t: int) -> float:
+        """Height of tray ``t``'s floor top. Tray 0 is at z = 0."""
+        return round(t * self.shelf_pitch, 9)
+
     def cell_center(self, r: int, c: int) -> tuple[float, float]:
         """(x, y) of cell ``(r, c)``, counted from 0, with the grid centred on the origin."""
         if not (0 <= r < self.rows and 0 <= c < self.cols):
@@ -381,6 +417,18 @@ class SceneSpec:
                     p.append("crawfish_length must be at least twice crawfish_radius")
                 if 2 * self.crawfish_radius >= self.box_size[2]:
                     p.append("the crawfish is taller than the box walls")
+            if self.preset is None and self.trays > 1:
+                if self.shelf_gap < MIN_STACKED_SHELF_GAP - EPS:
+                    p.append(
+                        f"shelf_gap {self.shelf_gap:.3f} is too small for stacked trays: a lifted box needs "
+                        f"{MIN_STACKED_SHELF_GAP:.2f} m under the tray above"
+                    )
+                top = self.shelf_base_z(self.trays - 1) + ENGAGE_PLUS_LIFT
+                if top > MAST_Z_TOP + EPS:
+                    p.append(
+                        f"the top tray's lift needs the mast at {top:.3f} m, above its {MAST_Z_TOP:.2f} m reach; "
+                        "use fewer trays or a smaller shelf_gap"
+                    )
             if self.preset is None and self.shells:
                 inner = min(self.box_size[0], self.box_size[1]) - 2 * BOX_WALL_FOR_SPEC
                 if self.shell_length > inner - 2 * CLEARANCE / 4:
