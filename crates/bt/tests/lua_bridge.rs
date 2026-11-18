@@ -407,3 +407,27 @@ fn a_leaf_reads_the_detected_cells_soonest_first() {
     assert_eq!(w.tick(&mut bb), Status::Failure);
     assert!(w.take_errors()[0].message.contains("read-only"));
 }
+
+#[test]
+fn a_leaf_can_name_a_cell_on_another_tray() {
+    // Row 10.3: Cell(r, c, t) and Transfer(r, c, t); t left out means tray 0.
+    let d = dir("trays");
+    write(
+        &d,
+        "a.lua",
+        r#"function tick(bb) bb:go_to(Transfer(0, 2, 1)) return "running" end"#,
+    );
+    write(
+        &d,
+        "b.lua",
+        r#"function tick(bb) bb:go_to(Cell(0, 3, 0)) return "running" end"#,
+    );
+    let (mut bb, s) = board();
+    load(&d, r#"return Leaf("a.lua")"#).tick(&mut bb);
+    assert_eq!(
+        bb.get(&s.gantry_goal),
+        Some(&Some(Pose::TransferOn(1, 0, 2)))
+    );
+    load(&d, r#"return Leaf("b.lua")"#).tick(&mut bb);
+    assert_eq!(bb.get(&s.gantry_goal), Some(&Some(Pose::Cell(0, 3))));
+}

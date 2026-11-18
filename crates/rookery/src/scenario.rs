@@ -145,6 +145,12 @@ impl Scenario {
                     Value::Table(t)
                 }
                 Pose::Home => Value::String(lua.create_string("home")?),
+                Pose::CellOn(t, r, c) => Value::Table(lua.create_sequence_from([r, c, t])?),
+                Pose::TransferOn(t, r, c) => {
+                    let tb = lua.create_table()?;
+                    tb.set("transfer", lua.create_sequence_from([r, c, t])?)?;
+                    Value::Table(tb)
+                }
             };
             visited.set(i + 1, v)?;
         }

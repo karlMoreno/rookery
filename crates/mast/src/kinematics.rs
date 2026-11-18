@@ -64,7 +64,14 @@ pub struct SceneMeta {
     pub handle_height: f64,
     /// Water depth above the tray floor (the water plane's height).
     pub water_depth: f64,
+    /// Stacked trays (Phase 10). 1 in every scene before the rack.
+    #[serde(default = "one")]
+    pub trays: usize,
     pub derived: Derived,
+}
+
+fn one() -> usize {
+    1
 }
 
 /// Placements the scene resolved (`"derived"` in `rookery.json`).
@@ -78,6 +85,10 @@ pub struct Derived {
     /// a scene from before slots, which then has only `exit_pose`.
     #[serde(default)]
     pub exit_slots: Vec<[f64; 3]>,
+    /// Height of each tray's floor top (Phase 10), lowest first. Absent for
+    /// one tray, whose floor is at z = 0.
+    #[serde(default)]
+    pub shelf_bases: Vec<f64>,
 }
 
 /// Why scene metadata could not be read.
@@ -112,6 +123,20 @@ impl SceneMeta {
 
     /// (x, y) of cell `(r, c)` in the tray frame. This is the same formula as
     /// `SceneSpec.cell_center`: the grid is centred and rows run along +X.
+    /// Whether this is a rack of stacked trays (Phase 10). On a rack every
+    /// arm move happens inside a shelf window; see `route`.
+    pub fn is_rack(&self) -> bool {
+        self.trays > 1
+    }
+
+    /// Height of tray `t`'s floor top, or `None` for a tray the scene lacks.
+    pub fn shelf_base(&self, t: usize) -> Option<f64> {
+        if t >= self.trays {
+            return None;
+        }
+        Some(self.derived.shelf_bases.get(t).copied().unwrap_or(0.0))
+    }
+
     pub fn cell_center(&self, r: usize, c: usize) -> (f64, f64) {
         let x = (r as f64 - (self.rows as f64 - 1.0) / 2.0) * self.cell_pitch;
         let y = (c as f64 - (self.cols as f64 - 1.0) / 2.0) * self.cell_pitch;
@@ -147,6 +172,17 @@ pub fn cell_pose(r: usize, c: usize, meta: &SceneMeta) -> Option<JointTargets> {
     }
     let (x, y) = meta.cell_center(r, c);
     Some(JointTargets([y, meta.engage_z(0.0), meta.arm_for(x), 0.0]))
+}
+
+/// Engage pose under the handle of the box in cell (`r`, `c`) of tray `t`
+/// (Phase 10). Tray 0 is [`cell_pose`].
+pub fn cell_pose_on(t: usize, r: usize, c: usize, meta: &SceneMeta) -> Option<JointTargets> {
+    if r >= meta.rows || c >= meta.cols {
+        return None;
+    }
+    let base = meta.shelf_base(t)?;
+    let (x, y) = meta.cell_center(r, c);
+    Some(JointTargets([y, meta.engage_z(base), meta.arm_for(x), 0.0]))
 }
 
 /// Engage pose under the handle of a box sitting on the exit tray.

@@ -41,6 +41,11 @@ pub enum Pose {
     Exit,
     /// Engaged under the handle of a box in exit slot `i` (row 8.4).
     ExitSlot(usize),
+    /// Engaged under the handle of the box in cell (row, col) of tray `t`
+    /// (Phase 10). `Cell(r, c)` is tray 0.
+    CellOn(usize, usize, usize),
+    /// The transfer job for cell (row, col) of tray `t` (Phase 10).
+    TransferOn(usize, usize, usize),
     /// Not a place but a job (row 6.5): move the box in cell (row, col) to
     /// the exit tray and return home. `route` refuses it, and the crane
     /// player runs `Transfer::build` instead.
@@ -61,6 +66,8 @@ pub enum RouteError {
     NotARoute(Pose),
     /// The scene has no exit slot `slot` (it has `slots`).
     NoSuchSlot { slot: usize, slots: usize },
+    /// The scene has no tray `tray` (it has `trays`).
+    NoSuchTray { tray: usize, trays: usize },
 }
 
 impl std::fmt::Display for RouteError {
@@ -70,6 +77,12 @@ impl std::fmt::Display for RouteError {
                 write!(f, "Cell({r}, {c}) is outside the {rows}x{cols} grid")
             }
             Self::NotARoute(p) => write!(f, "{p:?} is a job, not a place to route to"),
+            Self::NoSuchTray { tray, trays } => {
+                write!(
+                    f,
+                    "tray {tray} does not exist; the scene has {trays} tray(s)"
+                )
+            }
             Self::NoSuchSlot { slot, slots } => {
                 write!(
                     f,
@@ -129,18 +142,37 @@ impl Plan {
 
     fn goto(&mut self, pose: Pose, meta: &SceneMeta) -> Result<(), RouteError> {
         let travel = travel_z(meta);
+        // On a rack (Phase 10) the arm only ever moves inside a shelf window:
+        // it leaves at the height it worked at, and changes level retracted.
+        let rack = meta.is_rack();
         // Leave: back the finger out from under any handle, rise, retract.
         if self.at.0[Axis::ArmX.index()] > ARM_RETRACTED {
             let back = (self.at.0[Axis::ArmX.index()] - PRE).max(0.0);
             self.go(Axis::ArmX, back);
-            self.go(Axis::MastZ, travel.max(self.at.0[Axis::MastZ.index()]));
+            if !rack {
+                self.go(Axis::MastZ, travel.max(self.at.0[Axis::MastZ.index()]));
+            }
             self.go(Axis::ArmX, 0.0);
         }
-        if let Pose::Transfer(..) = pose {
+        if let Pose::Transfer(..) | Pose::TransferOn(..) = pose {
             return Err(RouteError::NotARoute(pose));
         }
+        let cell = |t: usize, r: usize, c: usize| -> Result<JointTargets, RouteError> {
+            if t >= meta.trays {
+                return Err(RouteError::NoSuchTray {
+                    tray: t,
+                    trays: meta.trays,
+                });
+            }
+            kinematics::cell_pose_on(t, r, c, meta).ok_or(RouteError::NoSuchCell {
+                r,
+                c,
+                rows: meta.rows,
+                cols: meta.cols,
+            })
+        };
         let target = match pose {
-            Pose::Transfer(..) => unreachable!("refused above"),
+            Pose::Transfer(..) | Pose::TransferOn(..) => unreachable!("refused above"),
             Pose::Home => {
                 let h = kinematics::home();
                 self.go(Axis::MastZ, h.0[Axis::MastZ.index()]);
@@ -148,14 +180,8 @@ impl Plan {
                 self.go(Axis::HookLift, h.0[Axis::HookLift.index()]);
                 return Ok(());
             }
-            Pose::Cell(r, c) => {
-                kinematics::cell_pose(r, c, meta).ok_or(RouteError::NoSuchCell {
-                    r,
-                    c,
-                    rows: meta.rows,
-                    cols: meta.cols,
-                })?
-            }
+            Pose::Cell(r, c) => cell(0, r, c)?,
+            Pose::CellOn(t, r, c) => cell(t, r, c)?,
             Pose::Exit => kinematics::exit_pose(meta),
             Pose::ExitSlot(i) => {
                 kinematics::exit_slot_pose(i, meta).ok_or(RouteError::NoSuchSlot {
@@ -164,6 +190,17 @@ impl Plan {
                 })?
             }
         };
+        if rack {
+            // Arm retracted in the aisle: go to the target's own height
+            // first, then along the rail, then reach in. The reach stays at
+            // one height, inside that shelf's window.
+            let [y, z, x, _] = target.0;
+            self.go(Axis::MastZ, z);
+            self.go(Axis::RailY, y);
+            self.go(Axis::ArmX, (x - PRE).max(0.0));
+            self.go(Axis::ArmX, x);
+            return Ok(());
+        }
         let [y, z, x, _] = target.0;
         self.go(Axis::MastZ, travel);
         self.go(Axis::RailY, y);
