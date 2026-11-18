@@ -15,7 +15,7 @@
 //! ```
 //!
 //! `rookery replay <run dir>` re-applies the targets step by step, steps the
-//! world with the same jumps, and diffs the event log against the recorded
+//! world with the same jumps (and the same exit-tray worker), and diffs the event log against the recorded
 //! one: same kinds, cells and biological times, in the same order.
 
 use std::fs;
@@ -131,10 +131,12 @@ pub fn replay(dir: &Path) -> Result<ReplayReport, String> {
     // tick's world step, shell moves and harvest check.
     let tick_dt = meta.every as f64 * meta.dt_phys;
     let (mut bio, mut events) = (0.0, Vec::new());
+    let mut worker = crate::exit_worker::ExitWorker::default();
     for b in &blocks {
         if b.ff > 0.0 {
             let evs = world.step(b.ff);
             bio += b.ff;
+            worker.note(&evs, bio);
             events.extend(evs.into_iter().map(|e| (bio, e)));
         }
         for _ in 0..meta.every {
@@ -144,11 +146,15 @@ pub fn replay(dir: &Path) -> Result<ReplayReport, String> {
         }
         bio += tick_dt;
         let evs = world.step(tick_dt);
+        worker.note(&evs, bio);
         events.extend(evs.into_iter().map(|e| (bio, e)));
         if let Some(m) = mover.as_mut() {
             m.apply(&mut sim, bio);
         }
+        let cleared = worker.apply(&mut sim, &mut world, bio);
+        events.extend(cleared.into_iter().map(|e| (bio, e)));
         let lifted = harvest_lifted(&mut world, &sim.qpos());
+        worker.note(&lifted, bio);
         events.extend(lifted.into_iter().map(|e| (bio, e)));
     }
 

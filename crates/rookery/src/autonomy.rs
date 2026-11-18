@@ -32,9 +32,6 @@ const TICK_HZ: f64 = 50.0;
 /// 30 s, so this covers a month of molts with room to spare; past it the
 /// run stops early rather than hang.
 pub const MAX_PHYSICS_SECONDS: f64 = 900.0;
-/// A box is in its exit slot when its floor's centre is this close to the
-/// slot (metres, horizontally) and within 1 cm of the tray top.
-const IN_SLOT_TOL: f64 = 0.02;
 
 /// What to run.
 #[derive(Debug, Clone)]
@@ -59,7 +56,9 @@ pub struct AutonomyReport {
     /// order: `Molted`, `WindowClosing`, `ShellEaten`, and from 8.2
     /// `BoxLifted` and `WindowMissed`.
     pub events: Vec<(f64, Event)>,
-    /// Cells whose box rests in an exit slot when the run ends (8.4).
+    /// Cells whose box was delivered to an exit slot (8.4): still resting
+    /// there when the run ends, or found there by the worker who cleared it
+    /// off the tray (8.7).
     pub boxes_in_slots: Vec<CellId>,
     /// Leaf, route, move and shell errors, as in the run log.
     pub errors: Vec<String>,
@@ -140,18 +139,14 @@ pub fn run(args: &AutonomyArgs) -> Result<AutonomyReport, String> {
             hooks.bio_time()
         ));
     }
-    let boxes_in_slots = hooks
+    // In a slot now, or found in its slot by the worker who cleared it (8.7).
+    let mut boxes_in_slots: Vec<CellId> = hooks
         .slot_of
         .iter()
-        .filter(|(cell, slot)| {
-            let i = 7 * (usize::from(cell.r) * meta.cols + usize::from(cell.c));
-            let (Some(b), Some(p)) = (q.get(i..i + 3), meta.derived.exit_slots.get(*slot)) else {
-                return false;
-            };
-            (b[0] - p[0]).hypot(b[1] - p[1]) < IN_SLOT_TOL && (b[2] - p[2]).abs() < 0.01
-        })
+        .filter(|(cell, slot)| crate::bt_hooks::box_in_slot(&q, &meta, *cell, *slot))
         .map(|(cell, _)| *cell)
         .collect();
+    boxes_in_slots.extend(hooks.delivered.iter().copied());
     let report = AutonomyReport {
         events: hooks.bio_events.clone(),
         boxes_in_slots,

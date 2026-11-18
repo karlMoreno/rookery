@@ -174,6 +174,7 @@ impl Event {
             Event::ShellEaten(_) => Event::ShellEaten(cell),
             Event::BoxLifted(_) => Event::BoxLifted(cell),
             Event::WindowMissed(_) => Event::WindowMissed(cell),
+            Event::Harvested(_) => Event::Harvested(cell),
         }
     }
 }
@@ -191,6 +192,9 @@ pub enum Event {
     BoxLifted(CellId),
     /// The window closed with the animal still in its box.
     WindowMissed(CellId),
+    /// A worker took this cell's box off the exit tray (row 8.7), freeing
+    /// its slot. Published by the Integrator through the bus.
+    Harvested(CellId),
 }
 
 /// One animal and where it is in its cycle.
