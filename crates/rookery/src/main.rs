@@ -50,6 +50,11 @@ enum Cmd {
     /// Play a tour script (--script) or a behavior tree (--tree) on the crane,
     /// logging every tick (Phase 3 and Phase 4 demos).
     Run(tour_cmd::RunArgs),
+    /// Replay a logged run from its targets and diff the event log (row 8.6)
+    Replay {
+        /// The run's log directory, runs/<id>
+        dir: PathBuf,
+    },
     /// Run N offset lifts on cell (1, 1) and print their margins as JSON
     /// (row 5.6; used by scene/scene/sweep.py).
     Lift {
@@ -78,6 +83,19 @@ fn main() -> ExitCode {
             _,
         ) => rookery::lift_trials::summary(scene, *seeds, *lift_speed)
             .map(|v| serde_json::to_string(&v).unwrap_or_default() + "\n"),
+        (Some(Cmd::Replay { dir }), _) => rookery::replay::replay(dir).and_then(|r| {
+            let line = format!(
+                "replay {}: {} blocks, {} events recorded, {} replayed\n",
+                dir.display(),
+                r.blocks,
+                r.recorded,
+                r.replayed
+            );
+            match r.first_difference {
+                None => Ok(line + "every event matches\n"),
+                Some(d) => Err(line + &format!("DIFFERS at {d}\n")),
+            }
+        }),
         (None, Some(scene)) => run(scene).map(|r| r.to_string()),
         (None, None) => Err("give a scene to load, or `rookery run --script <tour.ron>`".into()),
     };
@@ -350,6 +368,50 @@ mod tests {
                 .iter()
                 .any(|(_, e)| e.starts_with("fault"))
         );
+    }
+
+    #[test]
+    fn a_logged_run_replays_event_for_event_and_tampering_shows() {
+        // Row 8.6: a transfer long enough to lift the box (BoxLifted), with
+        // biology fast-forwarding first; then replay it from targets.csv.
+        let dir = std::env::temp_dir().join(format!("rookery-replay-{}", std::process::id()));
+        let args = tour_cmd::RunArgs {
+            script: None,
+            tree: Some(cli("lua/trees/transfer.lua")),
+            seconds: 14.0,
+            log: dir.clone(),
+            scene: cli("scene/generated/rookery.xml"),
+            id: Some("r".into()),
+            scenario: None,
+            ticks: None,
+            fault_at: None,
+            seed: 7,
+        };
+        tour_cmd::run(&args).expect("the run");
+        let run = dir.join("r");
+        let r = rookery::replay::replay(&run).expect("replays");
+        assert!(r.recorded >= 1 && r.first_difference.is_none(), "{r:?}");
+
+        // Hold the crane at zero targets: the box is never lifted.
+        let csv = std::fs::read_to_string(run.join("targets.csv")).unwrap();
+        let zeroed: String = csv
+            .lines()
+            .enumerate()
+            .map(|(i, l)| {
+                if i == 0 {
+                    format!("{l}\n")
+                } else {
+                    format!("{},0,0.45,0,0\n", l.split(',').next().unwrap())
+                }
+            })
+            .collect();
+        std::fs::write(run.join("targets.csv"), zeroed).unwrap();
+        let r = rookery::replay::replay(&run).expect("replays");
+        assert!(
+            r.first_difference.is_some(),
+            "a different crane must change the events: {r:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -834,6 +896,10 @@ mod tour_cmd {
             serde_json::to_string_pretty(&summary).unwrap_or_default() + "\n",
         )
         .map_err(|e| e.to_string())?;
+        // Row 8.6: enough to replay the run without the tree.
+        let run_meta =
+            rookery::replay::RunMeta::new(args.seed, &args.scene, tree_path, every, dt_phys)?;
+        rookery::replay::write_log(&dir, &run_meta, &hooks.blocks)?;
         let report = format!(
             "run {id}: tree {}, {} ticks over {:.2} s sim, last status {:?}, goal {:?}, {} error(s)\nlog {}\n",
             tree_path.display(),

@@ -9,6 +9,7 @@
 //!          ── crane    MoveCommand player, sim → GantryObs, qpos log
 //!          ── bt_hooks the behavior tree drives the crane through goals
 //!          ── shells   the shell mover (Observer of the World's bus)
+//!          ── replay   targets.csv + meta.json, and `rookery replay` (8.6)
 //!          ── scenario Lua scenarios and the run log they check
 //!          ── tour / script / lift_trials   the Phase 3 and 5 drivers
 //!      ▲ dev-dependency
@@ -19,6 +20,7 @@ pub mod autonomy;
 pub mod bt_hooks;
 pub mod crane;
 pub mod lift_trials;
+pub mod replay;
 pub mod runner;
 pub mod scenario;
 pub mod script;
