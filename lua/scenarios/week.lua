@@ -27,7 +27,7 @@ function check(log)
       end
     elseif e.kind == "ShellEaten" then
       eaten = eaten + 1
-    elseif e.kind == "WindowClosing" then
+    elseif e.kind == "WindowMissed" then
       -- Informational until Phase 8 harvests: every window closes unharvested.
       windows = windows + 1
     end

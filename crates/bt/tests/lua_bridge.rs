@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use bt::{
-    BbEvent, BbSchema, Blackboard, EVENTS_KEPT, GantrySnapshot, RELOAD_CHECK_TICKS, Status, Tree,
+    BbDetected, BbEvent, BbSchema, Blackboard, EVENTS_KEPT, GantrySnapshot, RELOAD_CHECK_TICKS,
+    Status, Tree,
 };
 use mast::route::Pose;
 use mlua::Lua;
@@ -354,4 +355,55 @@ fn a_leaf_can_send_the_crane_to_an_exit_slot() {
             .message
             .contains("ExitSlot i must be ≥ 0")
     );
+}
+
+#[test]
+fn a_leaf_reads_the_detected_cells_soonest_first() {
+    // Row 8.3: a synthetic detection reaches Lua, sorted, read-only.
+    let d = dir("detected");
+    write(
+        &d,
+        "pick.lua",
+        r#"function tick(bb)
+             local first = bb.detected[1]
+             if not first then return "failure" end
+             bb:go_to(Transfer(first.r, first.c))
+             return "success"
+           end"#,
+    );
+    write(
+        &d,
+        "w.lua",
+        r#"function tick(bb) bb.detected = {} return "success" end"#,
+    );
+    let mut tree = load(&d, r#"return Leaf("pick.lua")"#);
+    let (mut bb, s) = board();
+    assert_eq!(tree.tick(&mut bb), Status::Failure, "nothing detected yet");
+    let cell = |r, c, closes_in| BbDetected {
+        tray: 0,
+        r,
+        c,
+        closes_in,
+    };
+    s.write_detected(
+        &mut bb,
+        vec![cell(3, 3, 7200.0), cell(1, 2, 600.0), cell(0, 1, 3600.0)],
+    );
+    assert_eq!(tree.tick(&mut bb), Status::Success);
+    assert_eq!(
+        bb.get(&s.gantry_goal),
+        Some(&Some(Pose::Transfer(1, 2))),
+        "the soonest-closing window"
+    );
+    let order: Vec<_> = bb
+        .get(&s.detected)
+        .unwrap()
+        .iter()
+        .map(|d| (d.r, d.c))
+        .collect();
+    assert_eq!(order, [(1, 2), (0, 1), (3, 3)]);
+
+    let mut w = load(&d, r#"return Leaf("w.lua")"#);
+    assert_eq!(w.tick(&mut bb), Status::Failure);
+    assert!(w.take_errors()[0].message.contains("read-only"));
 }

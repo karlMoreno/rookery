@@ -6,6 +6,7 @@
 //! ```text
 //!   pre_step (1 ms)   crane.apply(sim)                       targets → actuators
 //!   tick (20 ms)      world.step(20 ms) → events → bb `events` + run log (7.2, 7.5)
+//!                     detector → bb `detected` (soonest first)  (8.3)
 //!                     shells.apply(sim)                       move shed shells (7.5)
 //!                     obs = crane.observe(sim)
 //!                     schema.write_snapshot(bb, {sim_time, q, targets, route_len})
@@ -21,10 +22,10 @@
 
 use std::io::Write;
 
-use bt::{BbEvent, BbSchema, Blackboard, GantrySnapshot, Status, Tree};
+use bt::{BbDetected, BbEvent, BbSchema, Blackboard, GantrySnapshot, Status, Tree};
 use mast::route::{self, Pose};
 use mast::{DONE_TOL, GantryState, JointTargets, SceneMeta};
-use rookery_core::{CellId, Event, World};
+use rookery_core::{CellId, CellObs, DetectorKind, Event, MoltDetector, World};
 use sim::Sim;
 
 use crate::crane::{Crane, Step};
@@ -69,12 +70,20 @@ pub struct BtHooks<W: Write> {
     pub shells: Option<ShellMover>,
     /// Events handed to the tree so far (the `seq` of the last one).
     event_seq: u64,
+    /// Decides which cells have molted (row 8.3; pattern: **Strategy**).
+    detector: Box<dyn MoltDetector>,
 }
 
 /// Ticks the crane must sit idle before the clock may fast-forward (0.5 s at
 /// 50 Hz), so a tree between two goals, or one that hasn't ticked yet, gets
 /// the chance to ask for something first.
 pub const IDLE_TICKS_BEFORE_FF: u32 = 25;
+
+/// A transferred box counts as lifted out of its cell (`BoxLifted`, row
+/// 8.2) once its floor is this far above the tray floor, metres. The hook
+/// lifts a box about 15 cm to carry it, and a box at rest sits within a
+/// millimetre of 0.
+pub const LIFTED_Z: f64 = 0.02;
 
 impl<W: Write> BtHooks<W> {
     pub fn new(
@@ -109,6 +118,7 @@ impl<W: Write> BtHooks<W> {
             idle_ticks: 0,
             shells: None,
             event_seq: 0,
+            detector: DetectorKind::default().build(),
         })
     }
 
@@ -230,6 +240,22 @@ impl<W: Write> Hooks for BtHooks<W> {
             let events = world.step(self.tick_dt);
             self.record(events);
         }
+        // Row 8.3: what the detector sees, for the tree's `detected` key.
+        if let Some(world) = self.world.as_ref() {
+            let obs = CellObs::default(); // the oracle reads the world, not the sim
+            let mut cells = Vec::new();
+            for (i, (cell, _)) in world.animals().iter().enumerate() {
+                if self.detector.detect(*cell, &obs, world).is_some() {
+                    cells.push(BbDetected {
+                        tray: cell.tray,
+                        r: cell.r,
+                        c: cell.c,
+                        closes_in: world.window_left(i).unwrap_or(0.0),
+                    });
+                }
+            }
+            self.schema.write_detected(&mut self.bb, cells);
+        }
         // Shells move before the snapshot, so the tree and physics see them.
         if let Some(mover) = self.shells.as_mut() {
             let errors = mover.apply(sim, self.bio_time);
@@ -292,6 +318,24 @@ impl<W: Write> Hooks for BtHooks<W> {
         };
         if let Step::Failed(reason) = step {
             self.errors.push(format!("move: {reason}"));
+        }
+
+        // Row 8.2: the box of a Transfer goal has left its cell, so the
+        // animal is harvested. The world publishes BoxLifted once.
+        if let Some(Pose::Transfer(r, c)) = self.last_goal
+            && let Some(world) = self.world.as_mut()
+        {
+            let z = sim.qpos().get(7 * (r * self.meta.cols + c) + 2).copied();
+            let cell = CellId {
+                tray: 0,
+                r: r as u8,
+                c: c as u8,
+            };
+            if z.is_some_and(|z| z > LIFTED_Z)
+                && let Some(e) = world.harvest(cell)
+            {
+                self.record(vec![e]);
+            }
         }
 
         // Arrival: the goal's route is done and the joints have settled.

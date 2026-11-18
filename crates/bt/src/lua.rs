@@ -6,7 +6,7 @@
 //!
 //!   LuaLeaf::tick(bb)
 //!     every 10 ticks: mtime changed on two checks in a row? → reload (keep old code on error)
-//!     view = read-only table { sim_time, gantry_q, gantry_target, route_len, goal, events }
+//!     view = read-only table { sim_time, gantry_q, gantry_target, route_len, goal, events, detected }
 //!            + bb:go_to(pose)   ← the only write, a goal pose (Home() / Exit() / Cell(r, c))
 //!     tick(view, args…) via mlua (a Lua error comes back as Err, never a panic)
 //!       Ok("success" | "failure" | "running") → Status
@@ -320,6 +320,20 @@ fn view(
         }
     }
     data.set("events", events)?;
+    // Row 8.3: the cells detected now, soonest-closing first, each
+    // { tray, r, c, closes_in } (seconds).
+    let detected = lua.create_table()?;
+    if let Ok(Some(cells)) = bb.get_named::<Vec<crate::BbDetected>>("detected") {
+        for (i, d) in cells.iter().enumerate() {
+            let t = lua.create_table()?;
+            t.set("tray", d.tray)?;
+            t.set("r", d.r)?;
+            t.set("c", d.c)?;
+            t.set("closes_in", d.closes_in)?;
+            detected.set(i + 1, t)?;
+        }
+    }
+    data.set("detected", detected)?;
     data.set(
         "go_to",
         lua.create_function(move |_, (_this, pose): (Value, Value)| {
@@ -339,6 +353,7 @@ fn view(
         "goal",
         "go_to",
         "events",
+        "detected",
     ];
     let d = data.clone();
     meta.set(
