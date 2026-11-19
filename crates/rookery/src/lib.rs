@@ -4,7 +4,8 @@
 //! ```text
 //!   main.rs (CLI: summarise, run --script/--tree/--scenario, lift)
 //!      │ uses
-//!   lib.rs ── autonomy unattended runs: the Phase 8 gate's entry point
+//!   lib.rs ── bench    one sweep point → one CSV row (12)
+//!          ── autonomy unattended runs: the Phase 8 gate's entry point
 //!          ── config   rookery.toml: which farm to run (10.4)
 //!          ── camera   each cell's depth view and the fidelity samples (11)
 //!          ── cells    every tray's cells: order, names, qpos blocks (10.5)
@@ -21,6 +22,7 @@
 //! ```
 
 pub mod autonomy;
+pub mod bench;
 pub mod bt_hooks;
 pub mod camera;
 pub mod cells;

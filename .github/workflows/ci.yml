@@ -149,3 +149,54 @@ jobs:
       # Phase 11 (row 11.1): the camera gates, ignored in the main gates job.
       - if: ${{ !cancelled() }}
         run: cargo test --release -p gates --test phase11_camera -- --ignored
+
+  # Phase 12 (row 12.1): a clean clone builds, runs the small benchmark sweep
+  # end to end, and checks the results file; the bench determinism gate
+  # runs here too (ignored in the main gates job).
+  clean-clone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache MuJoCo
+        id: mujoco-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.mujoco/mujoco-${{ env.MUJOCO_VERSION }}
+          key: mujoco-${{ runner.os }}-${{ env.MUJOCO_VERSION }}
+      - name: Download MuJoCo
+        if: steps.mujoco-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.mujoco && cd ~/.mujoco
+          base=https://github.com/google-deepmind/mujoco/releases/download/$MUJOCO_VERSION
+          tarball=mujoco-$MUJOCO_VERSION-linux-x86_64.tar.gz
+          curl -fsSL -O "$base/$tarball" -O "$base/$tarball.sha256"
+          sha256sum -c "$tarball.sha256"
+          tar xzf "$tarball" && rm "$tarball" "$tarball.sha256"
+      - name: Export MuJoCo paths
+        run: |
+          dir="$HOME/.mujoco/mujoco-$MUJOCO_VERSION"
+          echo "MUJOCO_DIR=$dir" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$dir/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+        working-directory: scene
+      - run: cargo build --release -p rookery
+      - run: cargo test --release -p gates --test phase12_release -- --ignored
+      - name: Small benchmark sweep (row 12.3)
+        if: ${{ !cancelled() }}
+        working-directory: scene
+        run: uv run python -m scene.bench ../bench/small.toml --out ../results.csv
+      - name: results.csv has the fixed header and a row per point
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'PY'
+          import csv, tomllib
+          rows = list(csv.reader(open("results.csv")))
+          points = tomllib.load(open("bench/small.toml", "rb"))["point"]
+          assert rows and len(rows[0]) == 15 and rows[0][0] == "scene", rows[:1]
+          assert len(rows) == 1 + len(points), f"{len(rows) - 1} rows for {len(points)} points"
+          print(f"results.csv: {len(rows) - 1} rows, header ok")
+          PY

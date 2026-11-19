@@ -1,0 +1,23 @@
+# Phase 12 (row 12.1): a release tag needs its CHANGELOG entry.
+#
+#   git tag -a v0.1.0 && git push origin v0.1.0
+#     ─▶ this job fails unless CHANGELOG.md has a "## [0.1.0]" heading
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: CHANGELOG.md has an entry for the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! grep -qE "^## \[${version//./\\.}\]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no '## [${version}]' entry for ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "CHANGELOG.md has an entry for ${GITHUB_REF_NAME}"
