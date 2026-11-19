@@ -1,8 +1,66 @@
 # Rookery
 
 A MuJoCo simulation of a soft-shell crawfish shedding facility, served by a
-stacker-crane gantry (`mast`). Rust (sim bridge, BT engine, kinematics, safety),
-Lua (behaviors), Python (scene generation, video).
+stacker-crane gantry (`mast`). Crawfish live in mesh boxes on trays, molt on
+their own schedule, and must be lifted out within a few hours of molting. The
+farm runs itself: a detector (an oracle, or a ray-cast depth camera) spots each
+molt, a Lua behavior tree picks the most urgent box, and the crane moves it to
+the exit tray.
+
+## The three layers
+
+```text
+  Lua      behaviors     lua/trees, lua/leaves: goals only (bb:go_to), read-only blackboard
+  Rust     the engine    crates/sim (MuJoCo FFI, all unsafe), mast (kinematics, clamp, commands),
+                         bt (behavior trees, mlua), rookery-core (lifecycle, events, vision),
+                         rookery (the Integrator: clock, crane, detectors, logs, replay, bench)
+  Python   the scenes    scene/: SceneSpec → MJCF (generated, never hand-edited), renders, plots, bench
+```
+
+## One command
+
+```bash
+cargo run --release -p rookery -- run --config rookery.toml --scenario lua/scenarios/week_1tray.lua --log runs/
+```
+
+`rookery.toml` picks the farm (`scene`, `seed`, `detector`, `molt_rate`); point
+`scene` at `scene/generated/rack3.xml` for three stacked trays. Every run writes
+`runs/<id>/` (summary with metrics, events, `qpos.csv`, `targets.csv`), and
+`rookery replay runs/<id>` reproduces it event for event.
+
+## Add a scenario
+
+A scenario is a Lua file under `lua/scenarios/` with a tree, a length and a
+`check(log)`:
+
+```lua
+ci = true                                   -- run it in CI (scripts/run-scenarios.sh)
+scene = "../../scene/generated/rack3.xml"   -- optional; default --scene
+tree = "../trees/autonomy.lua"
+ticks = 7 * 24 * 3600 * 50                  -- biological time at 50 Hz; the clock fast-forwards
+function check(log)                         -- log.events, log.errors, log.visited, ...
+  return true, "what passed"
+end
+```
+
+## Benchmark
+
+```bash
+(cd scene && uv run python -m scene.bench ../bench/small.toml --out ../results.csv)
+```
+
+```bash
+(cd scene && uv run python -m scene.plots results ../results.csv --out-dir ../bench/figures)
+```
+
+The small sweep (10 points, under 2 minutes) runs in CI; `bench/large.toml` is
+the overnight grid. From the small sweep: no window missed at 4, 8 or 12 cells,
+about 10 s from molt to lift, camera precision 1.0 and recall 0.97–1.0.
+
+| | |
+|---|---|
+| ![missed windows per molt](bench/golden/missed_rate.png) | ![molt to lift](bench/golden/latency_cdf.png) |
+| ![camera precision and recall](bench/golden/precision_recall.png) | |
 
 ## Setup (macOS)
 
