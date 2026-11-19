@@ -32,14 +32,14 @@ fn the_same_point_and_seed_give_the_same_row() {
             molt_rate: 3.0,
             detector: DetectorKind::Oracle,
             seed: 7,
-            days: 7.0,
+            days: 3.0,
         },
         Point {
             scene: repo("scene/generated/rack3.xml"),
             molt_rate: 1.0,
             detector: DetectorKind::Camera,
             seed: 11,
-            days: 7.0,
+            days: 3.0,
         },
     ];
     let columns = CSV_HEADER.split(',').count();
