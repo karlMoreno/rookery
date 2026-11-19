@@ -1,10 +1,12 @@
 # The crane fitted to Rookery's single 4 x 4 tray (scene/generated/rookery.json),
-# with 0.46 m fork stages so the hook reaches the far row (fit study D2).
+# with 0.49 m fork stages so the hook reaches the far row (fit study D2; the
+# sim port set the rail back 0.17 m from the exit tray, so the far row is
+# 0.845 m from the rail line).
 # Only the numbers that differ from crane.toml are here.
 #
-# rack_x0 is put at the first thing in front of the mast in Rookery: the exit
-# tray's aisle edge, 0.12 m from the rail line, plus the 0.02 m post. Rookery's
-# far row is 0.795 m from the rail line; tests/test_rookery_fit.py checks that
+# rack_x0 keeps the folded hook 0.09 m in front of the mast, as the sim's
+# FOLDED does; the exit tray sits 0.17 m in front of the rail line. Rookery's
+# far row is 0.845 m from the rail line; tests/test_rookery_fit.py checks that
 # against the fork's reach.
 #
 #   python -m crane --spec presets/rookery_tray.toml check
@@ -28,7 +30,7 @@ handle_dia = 0.012
 
 [crane]
 rail_length = 1.40
-fork_length = 0.46         # reach about 0.81 m from the mast, about 0.38 m behind it when folded
+fork_length = 0.49         # reach about 0.87 m from the mast, about 0.41 m behind it when folded
 mast_length = 1.05
 guide_rail_z = 1.14
 

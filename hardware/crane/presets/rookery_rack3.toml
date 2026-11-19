@@ -4,13 +4,14 @@
 # crane.toml are here; tests/test_rookery_fit.py checks them against the scene.
 #
 # Frame: crane z = Rookery z + 0.10 (the bottom tray floor sits at 0.10 here and
-# at 0 in Rookery). Shelf pitch 0.305 is shelf_gap 0.17 in Rookery (fit study
-# D4: at 0.15 the carried fork top meets the shelf above).
+# at 0 in Rookery). Shelf pitch 0.315 is shelf_gap 0.18 in Rookery (fit study
+# D4: at 0.15 the carried fork top meets the shelf above; the sim port then
+# found 0.17 leaves a box 3 mm under the exit plate's top, so 0.18).
 #
 #   python -m crane --spec presets/rookery_rack3.toml check
 
 [rack]
-tier_floors = [0.10, 0.405, 0.71]
+tier_floors = [0.10, 0.415, 0.73]
 tub_length = 0.61
 tub_depth = 0.16
 tub_height = 0.08          # Rookery tray wall: 0.05 m water + 0.03 m freeboard
@@ -27,11 +28,11 @@ handle_dia = 0.012
 
 [crane]
 rail_length = 1.40
-mast_length = 1.05         # the top shelf at 0.71 needs the hook at about 0.94 m
+mast_length = 1.05         # the top shelf at 0.73 needs the hook at about 0.96 m
 guide_rail_z = 1.14
 
 [hook]
-lift_clear = 0.015         # the most the 0.305 m shelf pitch allows with the 45 mm shank, minus margin
+lift_clear = 0.015         # fits the 0.315 m shelf pitch with the 45 mm shank and margin
 
 [motion]
 vmax_mast = 0.15           # fit study D3: at 0.06 m/s the rack gate misses top-shelf windows

@@ -63,10 +63,10 @@ select an STL in Finder and press Space for a quick look. Print from
 
 `presets/` holds the crane fitted to Rookery's scenes (fit study, row 2.0 of the
 crane swap plan): `rookery_rack3.toml` for rack3's three one-deep shelves and
-`rookery_tray.toml` for the single 4 x 4 tray, with 0.46 m fork stages.
+`rookery_tray.toml` for the single 4 x 4 tray, with 0.49 m fork stages.
 `tests/test_rookery_fit.py` checks them against `scene/generated/`. Two known
 gaps are strict xfails until later rows: rack3's shelf pitch (regenerated with
-`shelf_gap` 0.17), and the J-hook setting Rookery's 120 mm boxes 8-33 mm off
+`shelf_gap` 0.18), and the J-hook setting Rookery's 120 mm boxes 8-33 mm off
 the exit slot (the hook becomes Rookery's 30 mm saddle).
 
 ```bash
