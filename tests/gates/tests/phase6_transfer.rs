@@ -94,7 +94,7 @@ impl World {
         pre.0[Axis::ArmX.index()] -= PRE;
         let mut q = sim.qpos();
         let n = q.len();
-        q[n - 4..].copy_from_slice(&pre.0);
+        q[n - mast::kinematics::CRANE_NQ..].copy_from_slice(&mast::kinematics::crane_qpos(&pre));
         sim.set_qpos(&q).map_err(|e| e.to_string())?;
         let st = GantryState {
             targets: pre,
