@@ -51,9 +51,9 @@ pub enum Axis {
     RailY,
     /// `mast_z`: the lift carriage up the mast.
     MastZ,
-    /// `arm_x`: the arm reaching toward the trays.
+    /// `arm_x`: the telescoping fork reaching toward the trays.
     ArmX,
-    /// `hook_lift`: the hook's own short stroke.
+    /// `hook_lift`: the old arm's hook stroke, locked at 0 for the fork.
     HookLift,
 }
 
@@ -325,17 +325,18 @@ pub trait Hook {
     fn reach(&self) -> f64;
 }
 
-/// The Phase 3 hook: a passive J-hook. A finger runs along +X from the arm
-/// tip with an upturned tip, so it slides under a handle and catches it
-/// when lifted. It has no actuator of its own beyond `hook_lift`.
+/// The hook: a passive saddle on the tip of the telescoping fork. A finger
+/// runs along +X from the fork's tip with an upturned tip, so it slides under
+/// a handle and catches it when lifted. It is rigid (crane swap, D1): the
+/// mast raises it into the handle, and `hook_lift` stays locked at 0.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PassiveHook;
 
 impl Hook for PassiveHook {
     /// From the engage height, the finger rises half the box-top-to-handle
-    /// gap to touch the handle, then a little more to carry it. 2 cm is
-    /// within `HOOK_LIFT` (3 cm), as the preview showed (1.2 cm of lift
-    /// plus 1 cm of clearance).
+    /// gap to touch the handle, then a little more to carry it: 2 cm, which
+    /// the mast does at `lift::ENGAGE_SPEED` (the preview showed 1.2 cm of
+    /// lift plus 1 cm of clearance).
     fn engage_dz(&self) -> f64 {
         0.02
     }

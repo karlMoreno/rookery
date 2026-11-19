@@ -14,7 +14,9 @@
 
 use std::path::Path;
 
-use mast::kinematics::{HANDLE_DIAMETER, HOOK_FINGER, HOOK_TIP_RISE, shelf_windows};
+use mast::kinematics::{
+    CRANE_NQ, HANDLE_DIAMETER, HOOK_FINGER, HOOK_TIP_RISE, crane_qpos, shelf_windows,
+};
 use mast::lift::ENGAGE_SPEED;
 use mast::route::PRE;
 use mast::{
@@ -108,7 +110,7 @@ fn run(
     pre.0[Axis::ArmX.index()] -= PRE;
     let mut q = sim.qpos();
     let n = q.len();
-    q[n - 4..].copy_from_slice(&pre.0);
+    q[n - CRANE_NQ..].copy_from_slice(&crane_qpos(&pre));
     sim.set_qpos(&q).map_err(|e| e.to_string())?;
     let mut st = GantryState {
         targets: pre,
@@ -157,14 +159,11 @@ fn run(
 
     let mut slide = MoveCommand::new(Axis::ArmX, engaged.0[Axis::ArmX.index()]);
     play(&mut sim, &mut st, &mut slide, t)?;
+    // The fork's hook is rigid (crane swap, D1): the mast engages, then lifts.
+    let engage_z = engaged.0[Axis::MastZ.index()] + PassiveHook.engage_dz();
     let mut lift = MacroCommand::new(vec![
-        Box::new(
-            MoveCommand::new(Axis::HookLift, PassiveHook.engage_dz()).with_speed(ENGAGE_SPEED),
-        ),
-        Box::new(
-            MoveCommand::new(Axis::MastZ, engaged.0[Axis::MastZ.index()] + LIFT_HEIGHT)
-                .with_speed(lift_speed),
-        ),
+        Box::new(MoveCommand::new(Axis::MastZ, engage_z).with_speed(ENGAGE_SPEED)),
+        Box::new(MoveCommand::new(Axis::MastZ, engage_z + LIFT_HEIGHT).with_speed(lift_speed)),
     ]);
     play(&mut sim, &mut st, &mut lift, t)?;
     for _ in 0..SETTLE_TICKS * TICK_EVERY {

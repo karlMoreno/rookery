@@ -51,25 +51,20 @@ fn engaged() -> JointTargets {
 
 #[test]
 fn the_lift_raises_the_hook_then_the_mast() {
+    // The fork's hook is rigid (crane swap, D1): two mast moves, the slow
+    // engage and then the lift, and the hook stroke never moves.
     let start = engaged();
     let mut st = state(start);
     let mut lift = LiftSequence::build(start, LIFT_HEIGHT);
     let (s, moved) = run(&mut lift, &mut st, 10_000);
     assert_eq!(s, CmdStatus::Done);
-    let order: Vec<Axis> = moved.into_iter().flatten().fold(Vec::new(), |mut v, a| {
-        if v.last() != Some(&a) {
-            v.push(a);
-        }
-        v
-    });
-    assert_eq!(order, [Axis::HookLift, Axis::MastZ]);
-    assert_eq!(
-        st.targets.0[Axis::HookLift.index()],
-        PassiveHook.engage_dz()
-    );
-    assert_eq!(
-        st.targets.0[Axis::MastZ.index()],
-        start.0[Axis::MastZ.index()] + LIFT_HEIGHT
+    assert!(moved.into_iter().flatten().all(|a| a == Axis::MastZ));
+    assert_eq!(st.targets.0[Axis::HookLift.index()], 0.0);
+    assert!(
+        (st.targets.0[Axis::MastZ.index()]
+            - (start.0[Axis::MastZ.index()] + PassiveHook.engage_dz() + LIFT_HEIGHT))
+            .abs()
+            < 1e-12
     );
     assert_eq!(lift.completed(), 2);
 }
@@ -86,19 +81,21 @@ fn the_engage_segment_is_slower_than_max_vel() {
     let _ = obs;
     // With the acceleration ramp (6.6) the first steps are smaller; the
     // cruise step during the engage segment is ENGAGE_SPEED × MAX_VEL × dt.
-    let limit = MAX_VEL[Axis::HookLift.index()] * DT;
+    let limit = MAX_VEL[Axis::MastZ.index()] * DT;
     let mut biggest: f64 = 0.0;
-    for _ in 0..200 {
-        let before = st.targets.0[Axis::HookLift.index()];
+    for _ in 0..2000 {
+        let before = st.targets.0[Axis::MastZ.index()];
         let obs = GantryObs {
             q: st.targets.0,
             ee_contact: 0.0,
         };
         lift.tick(&mut st, &obs, DT);
-        biggest = biggest.max(st.targets.0[Axis::HookLift.index()] - before);
+        // Both segments move the mast now, so stop before the tick in which
+        // the engage finishes and the lift starts.
         if lift.completed() >= 1 {
             break;
         }
+        biggest = biggest.max(st.targets.0[Axis::MastZ.index()] - before);
     }
     assert!(
         (biggest - ENGAGE_SPEED * limit).abs() < 1e-12,

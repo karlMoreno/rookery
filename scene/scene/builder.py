@@ -14,7 +14,7 @@ at the end:
     .shells()      shell_r_c capsules, parked on a pad below ground (7.4)
     .exit_tray()   geom exit_tray between tray and rail            (2.5)
     .crane_frame() floor_rail + guide_rail (static, contact-free)  (2.5)
-    .gantry()      rail_y → mast_z → arm_x → hook_lift, actuators   (3.2)
+    .gantry()      rail_y → mast_z → arm_x (fork) → hook_lift, actuators (3.2, fork: crane swap)
   MjcfBuilder(spec).drop().build()   the Phase 1 scene, --preset drop (2.7)
     .build() -> str
 ```
@@ -83,21 +83,52 @@ DROP_HEIGHT = 0.5
 #: dump-limits` and fails if these drift from the Rust constants.
 GANTRY_RANGES = {
     "rail_y": (-0.40, 0.40),
-    "mast_z": (0.05, 0.80),
-    "arm_x": (0.00, 0.85),
-    "hook_lift": (0.00, 0.03),
+    "mast_z": (0.05, 0.85),
+    "arm_x": (0.07, 0.85),
+    "hook_lift": (0.00, 0.00),
 }
 #: Home pose (joint values), the same order as GANTRY_RANGES: truck centred,
-#: carriage at 0.45 m (the preview's home_mast), arm retracted, hook down.
-GANTRY_HOME = {"rail_y": 0.0, "mast_z": 0.45, "arm_x": 0.0, "hook_lift": 0.0}
+#: carriage at 0.45 m (the preview's home_mast), fork folded, hook down.
+GANTRY_HOME = {"rail_y": 0.0, "mast_z": 0.45, "arm_x": 0.07, "hook_lift": 0.0}
+#: A joint whose limits.rs range is a single value is locked (hook_lift, since
+#: the fork's hook is rigid). MuJoCo needs lo < hi, so the joint and its
+#: actuator get ±LOCK_EPS around it, and the position actuator holds it there.
+LOCK_EPS = 0.001
+#: The telescoping fork (crane swap; hardware/crane, preset rookery_tray.toml).
+#: Three stages of FORK_STAGE m fold flush with their fronts at the hook; the
+#: middle stage follows half the top stage's travel (joint arm_mid, held by an
+#: <equality>, as the belts do). FORK_ABOVE_HOOK is COPIED from limits.rs.
+FORK_STAGE = 0.49
+FORK_SHANK = 0.045
+FORK_ABOVE_HOOK = 0.072
+FORK_WIDTH = 0.024
 #: Position-actuator gains. With dampratio=1 each axis is critically damped,
 #: so a 0.3 m step settles in under 1 s with no overshoot (test_gantry.py).
 #: mast_z and hook_lift carry the box when lifting, so they are stiff
 #: (row 5.5): at kp 300/100 a 0.15 kg box sagged them past DONE_TOL and the
 #: mast move timed out, and at 2000 the sag is under 1 mm.
 GANTRY_KP = {"rail_y": 600.0, "mast_z": 2000.0, "arm_x": 200.0, "hook_lift": 2000.0}
-#: Moving masses, kg: truck, lift carriage, arm, hook.
+#: Moving masses, kg: truck, lift carriage, fork top stage, hook.
 GANTRY_MASS = {"rail_y": 5.0, "mast_z": 1.0, "arm_x": 0.5, "hook_lift": 0.1}
+#: The fork's middle stage, kg (not driven: the equality carries it).
+FORK_MID_MASS = 0.3
+#: Each fork stage's height: three stacked stages fill FORK_ABOVE_HOOK − FORK_SHANK.
+FORK_ABOVE_HOOK_STAGE = (FORK_ABOVE_HOOK - FORK_SHANK) / 3
+
+
+def fork_z(i: int) -> float:
+    """Centre height of fork stage ``i`` above the hook: 0 top stage (lowest,
+    it carries the shank), 1 middle, 2 the carriage's fixed stage (highest)."""
+    return FORK_SHANK + (i + 0.5) * FORK_ABOVE_HOOK_STAGE
+
+
+def gantry_range(name: str) -> tuple[float, float]:
+    """The MJCF range for a crane joint: GANTRY_RANGES, widened by LOCK_EPS
+    when limits.rs locks the joint to one value (MuJoCo needs lo < hi)."""
+    lo, hi = GANTRY_RANGES[name]
+    return (lo - LOCK_EPS, hi + LOCK_EPS) if hi - lo < 1e-12 else (lo, hi)
+
+
 CRANE_RGBA = (0.85, 0.75, 0.2, 1.0)
 HOOK_RGBA = (0.8, 0.2, 0.2, 1.0)
 # The hook's sizes are SceneSpec.hook_* (row 5.1). They and GANTRY_HOME are
@@ -484,11 +515,19 @@ class MjcfBuilder:
 
         ```text
           worldbody
-            crane_truck     slide rail_y    (Y)  on the floor rail at rail_line_x
-              crane_carriage slide mast_z   (Z)  q = hook height above the tray floor
-                crane_arm    slide arm_x    (X)  q = hook x - rail_line_x
-                  crane_hook slide hook_lift (Z) the J-hook's short stroke
+            crane_truck       slide rail_y    (Y)  on the floor rail at rail_line_x
+              crane_carriage  slide mast_z    (Z)  q = hook height above the tray floor
+                crane_arm     slide arm_x     (X)  fork top stage: q = hook x - rail_line_x
+                  crane_hook  slide hook_lift (Z)  locked at 0: the fork's hook is rigid
+                  camera cam_hook                  looks 45° down at the hook and handle
+                crane_fork_mid slide arm_mid  (X)  middle stage, not driven:
+                                                   <equality> arm_mid = FOLDED + (arm_x - FOLDED) / 2
         ```
+
+        The crane's four slides stay first among its joints, so qpos ends
+        with rail_y, mast_z, arm_x, hook_lift, arm_mid. The carriage carries
+        the fixed fork stage; each stage is a contact-free box FORK_STAGE long
+        whose front sits at the hook when folded, FORK_SHANK above it.
 
         Each joint's value *is* the coordinate that `limits.rs` speaks in.
         Every body starts at the home pose with ``ref`` equal to its home value,
@@ -508,10 +547,12 @@ class MjcfBuilder:
         free = [("contype", "0"), ("conaffinity", "0")]
         rgba = ("rgba", num(*CRANE_RGBA))
 
-        def joint(body: ET.Element, name: str, axis: tuple[float, float, float]) -> None:
-            lo, hi = GANTRY_RANGES[name]
+        def joint(body: ET.Element, name: str, axis: tuple[float, float, float],
+                  rng: tuple[float, float] | None = None, ref: float | None = None) -> None:
+            lo, hi = rng if rng is not None else gantry_range(name)
             self._el(body, "joint", [("name", name), ("type", "slide"), ("axis", num(*axis)),
-                                     ("range", num(lo, hi)), ("limited", "true"), ("ref", num(h[name])),
+                                     ("range", num(lo, hi)), ("limited", "true"),
+                                     ("ref", num(h[name] if ref is None else ref)),
                                      ("damping", num(5.0)), ("armature", num(0.05))])
 
         def inertial(body: ET.Element, name: str) -> None:
@@ -538,15 +579,26 @@ class MjcfBuilder:
         self._el(carriage, "geom", [("name", "crane_carriage_body"), ("type", "box"),
                                     ("size", num(0.03, 0.05, 0.03)), ("pos", num(-0.01, 0, 0.02)), *free, rgba])
 
+        # Fixed fork stage on the carriage, front at the folded hook.
+        folded = h["arm_x"]
+        stage = num(FORK_STAGE / 2, FORK_WIDTH / 2, FORK_ABOVE_HOOK_STAGE / 2)
+        self._el(carriage, "geom", [("name", "crane_fork_base"), ("type", "box"), ("size", stage),
+                                    ("pos", num(folded - FORK_STAGE / 2, 0, fork_z(2))), *free, rgba])
+
         arm = self._el(carriage, "body", [("name", "crane_arm"), ("pos", num(h["arm_x"], 0, 0)),
                                           ("gravcomp", "1")])
         joint(arm, "arm_x", (1, 0, 0))
         inertial(arm, "arm_x")
-        reach = GANTRY_RANGES["arm_x"][1]
-        # The beam trails back from the tip far enough to stay in the carriage at full reach.
-        self._el(arm, "geom", [("name", "crane_arm_beam"), ("type", "box"),
-                               ("size", num((reach + 0.05) / 2, 0.012, 0.01)),
-                               ("pos", num(-(reach + 0.05) / 2, 0, 0.02)), *free, rgba])
+        # Top stage: trails back from the hook; the shank drops from it to the hook.
+        self._el(arm, "geom", [("name", "crane_fork_top"), ("type", "box"), ("size", stage),
+                               ("pos", num(-FORK_STAGE / 2, 0, fork_z(0))), *free, rgba])
+        self._el(arm, "geom", [("name", "crane_fork_shank"), ("type", "box"),
+                               ("size", num(0.004, FORK_WIDTH / 2, FORK_SHANK / 2)),
+                               ("pos", num(-0.004, 0, FORK_SHANK / 2)), *free, rgba])
+        # Hook camera (row 2.4, D6): 6 cm behind the hook and 3 cm beside the
+        # shank (so the shank doesn't block it), looking 45° down along +X.
+        self._el(arm, "camera", [("name", "cam_hook"), ("pos", num(-0.06, -0.03, 0.035)),
+                                 ("xyaxes", num(0, -1, 0, 0.707107, 0, 0.707107)), ("fovy", num(67))])
 
         hook = self._el(arm, "body", [("name", "crane_hook"), ("pos", num(0, 0, h["hook_lift"])),
                                       ("gravcomp", "1")])
@@ -573,11 +625,25 @@ class MjcfBuilder:
         self._el(hook, "geom", [("name", "hook_stem"), ("type", "capsule"), ("size", num(hr_)),
                                 ("fromto", num(0, 0, 0, 0, 0, 0.02)), *free, hr])
 
+        # Middle stage, after the four driven slides so they keep their qpos order.
+        lo, hi = GANTRY_RANGES["arm_x"]
+        mid = self._el(carriage, "body", [("name", "crane_fork_mid"), ("pos", num(folded, 0, 0)),
+                                          ("gravcomp", "1")])
+        joint(mid, "arm_mid", (1, 0, 0), rng=(lo, (lo + hi) / 2 + LOCK_EPS), ref=folded)
+        self._el(mid, "inertial", [("pos", num(0, 0, 0)), ("mass", num(FORK_MID_MASS)),
+                                   ("diaginertia", num(0.01, 0.01, 0.01))])
+        self._el(mid, "geom", [("name", "crane_fork_mid"), ("type", "box"), ("size", stage),
+                               ("pos", num(-FORK_STAGE / 2, 0, fork_z(1))), *free, rgba])
+
         actuator = self._el(self.root, "actuator")
         for name in GANTRY_RANGES:
-            lo, hi = GANTRY_RANGES[name]
+            lo, hi = gantry_range(name)
             self._el(actuator, "position", [("name", name), ("joint", name), ("kp", num(GANTRY_KP[name])),
                                             ("dampratio", num(1)), ("ctrlrange", num(lo, hi))])
+        # The belts: arm_mid − ref = 0.5 (arm_x − ref), both refs at the folded fork.
+        equality = self._el(self.root, "equality")
+        self._el(equality, "joint", [("name", "arm_mid_follow"), ("joint1", "arm_mid"), ("joint2", "arm_x"),
+                                     ("polycoef", num(0, 0.5, 0, 0, 0))])
         keyframe = self._el(self.root, "keyframe")
         self._el(keyframe, "key", [("name", "home"), ("ctrl", num(*(h[n] for n in GANTRY_RANGES)))])
         return self
