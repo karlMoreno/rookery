@@ -1,0 +1,39 @@
+# The crane hardware package (hardware/crane): CAD, BOM, Klipper config and its
+# own MuJoCo model. It runs on its own so build123d's large install never slows
+# the Rust and scene jobs in ci.yml, and only when hardware/ changes.
+name: hardware
+
+on:
+  push:
+    paths:
+      - "hardware/**"
+      - ".github/workflows/hardware.yml"
+  pull_request:
+    paths:
+      - "hardware/**"
+      - ".github/workflows/hardware.yml"
+
+jobs:
+  crane:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hardware/crane
+    env:
+      # Headless: nothing here renders, and no viewer may open.
+      MUJOCO_GL: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: hardware/crane/pyproject.toml
+      - name: Install the crane package
+        run: pip install -e ".[dev]"
+      - name: Validate crane.toml
+        run: python -m crane check
+      - name: Tests (spec, parts, BOM drift, MuJoCo pick)
+        run: python -m pytest -q
+      - name: Pick and place in MuJoCo (fails if the box misses its slot)
+        run: python -m crane pick --out "$RUNNER_TEMP/crane"

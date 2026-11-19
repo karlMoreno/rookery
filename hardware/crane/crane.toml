@@ -1,0 +1,80 @@
+# crane.toml: every independent number for the Rookery stacker crane.
+#
+# Edit a number, save, and rerun `python -m crane build` (or `python show.py`).
+# Delete a line to fall back to its default in crane/spec.py.
+# CraneSpec refuses a spec that can't work and lists every reason at once.
+# Anything derivable (joint ranges, home pose, cell positions, extrusion lengths)
+# is worked out from these, so you never set it by hand.
+#
+# Units are metres (m/s for speeds) unless the name ends in _mm.
+# Axes match Rookery: Y runs along the aisle (the floor rail), X points into the
+# rack, Z is up. The joint values rail_y / mast_z / arm_x ARE the world
+# position of the hook's cup, so Rookery, MuJoCo and Klipper share one frame.
+
+[rack]
+rack_x0 = 0.10            # aisle-side face of the water tubs
+rack_y0 = 0.05            # tub edge nearest the start of the rail
+tier_floors = [0.10, 0.39, 0.68]   # tub floor heights; add a number for a 4th tier
+tub_length = 0.44         # along Y
+tub_depth = 0.44          # along X
+tub_height = 0.07
+tub_wall = 0.004
+cells_x = 4               # rows into the rack
+cells_y = 4               # columns along the aisle
+cell_pitch = 0.10
+water_depth = 0.04
+
+[box]
+box_size = 0.090          # printed mesh box, square
+box_height = 0.050
+handle_height = 0.030     # handle bar centre above the box rim
+handle_dia = 0.006        # bar diameter; runs along Y so the hook slides under it in +X
+
+[exit]
+exit_slots = 2
+exit_z = 0.30             # cradle floor height
+exit_gap_y = 0.08         # gap between the tubs and the exit tray along Y
+
+[crane]
+mast_x = -0.06            # mast centreline, aisle side of the rack
+rail_y0 = -0.25           # start of the floor rail
+rail_length = 1.10
+mast_length = 0.95        # 2020 extrusion
+fork_length = 0.32        # each of the three telescopic fork stages; reach is about 2 x (this - 0.1 m)
+arm_y_offset = 0.055      # fork centreline beside the mast (+Y), clear of the carriage wheels
+guide_rail_z = 1.04       # underside of the top guide rail (overall height about 1.06 m)
+
+[hook]
+hook_shank = 0.045        # fork underside (hook rail) to the cup
+hook_foot = 0.022         # cup length along X
+hook_lip = 0.010          # upturned tip that slides under the handle
+hook_section = 0.007
+engage_drop = 0.012       # how far below the bar the hook goes before sliding in
+lift_clear = 0.030        # box bottom above the tub rim when carried (clears the other boxes' handles)
+
+[motion]
+vmax_rail = 0.30
+vmax_mast = 0.06          # T8 lead screw on a NEMA17 (the sim preview used 0.15)
+vmax_arm = 0.20
+lead_screw_lead_mm = 8.0
+max_screw_rpm = 600       # whip and torque limit for a 0.9 m T8 screw
+belt_pulley_teeth = 20
+microsteps = 16
+
+[home]
+home_mast = 0.45          # park height after homing
+
+[print]
+bed_x_mm = 180            # small printer
+bed_y_mm = 180
+bed_z_mm = 180
+bed_margin_mm = 5
+infill_factor = 0.45      # printed mass = solid volume x PETG density x this
+
+[sensors]
+camera_tiers = [0]        # tiers that get a top-down camera bracket now (0 = bottom)
+camera_tilt_deg = 30      # camera looks back toward the aisle from the far side
+sensor_nodes = 1          # wireless water sensor nodes (one per populated tub)
+populated_tiers = [0]     # tubs that hold water and mesh boxes now
+hook_camera = true        # a camera under the hook rail that rides out with the fork
+hook_camera_tilt_deg = 45 # how far below level it looks (it sees the hook, the handle and the box)

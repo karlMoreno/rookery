@@ -1,0 +1,26 @@
+[project]
+name = "rookery-crane"
+version = "0.1.0"
+description = "Parametric build123d CAD for the Rookery stacker crane, with MuJoCo, STL, BOM and Klipper exports"
+requires-python = ">=3.11"
+dependencies = [
+    "build123d>=0.9",
+    "mujoco==3.16.0",   # Rookery pins MuJoCo 3.16.0 everywhere
+    "numpy",
+    "ocp_vscode",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pillow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["crane*"]
