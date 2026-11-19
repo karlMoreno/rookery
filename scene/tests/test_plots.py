@@ -48,3 +48,22 @@ def test_the_lognormal_has_the_configured_mean():
     xs = [i * 0.05 for i in range(1, 2000)]
     m = sum(x * plots.lognormal_pdf(x, 29.0, 4.0) * 0.05 for x in xs)
     assert m == pytest.approx(29.0, rel=1e-3)
+
+
+def test_benchmark_figures_regenerate_byte_identical(tmp_path):
+    # Row 12.4: the committed figures come from the committed small sweep.
+    from pathlib import Path
+    golden = Path(__file__).resolve().parents[2] / "bench" / "golden"
+    outs = plots.results(golden / "small.csv", tmp_path)
+    assert [o.name for o in outs] == ["missed_rate.png", "latency_cdf.png", "precision_recall.png"]
+    for o in outs:
+        assert o.read_bytes() == (golden / o.name).read_bytes(), f"{o.name} drifted: rerun scene.plots results"
+
+
+def test_missed_rate_counts_misses_per_molt(tmp_path):
+    rows = [
+        {"cells": 4, "detector": "oracle", "molts": 4, "missed_windows": 1},
+        {"cells": 4, "detector": "camera", "molts": 0, "missed_windows": 0},
+    ]
+    out = plots.missed_rate(rows, tmp_path / "m.png")
+    assert out.exists()
