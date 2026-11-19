@@ -1,16 +1,19 @@
 # The crane hardware package (hardware/crane): CAD, BOM, Klipper config and its
 # own MuJoCo model. It runs on its own so build123d's large install never slows
-# the Rust and scene jobs in ci.yml, and only when hardware/ changes.
+# the Rust and scene jobs in ci.yml, and only when hardware/ or the generated
+# scenes change.
 name: hardware
 
 on:
   push:
     paths:
       - "hardware/**"
+      - "scene/generated/**"   # tests/test_rookery_fit.py checks the presets against the scenes
       - ".github/workflows/hardware.yml"
   pull_request:
     paths:
       - "hardware/**"
+      - "scene/generated/**"   # tests/test_rookery_fit.py checks the presets against the scenes
       - ".github/workflows/hardware.yml"
 
 jobs:
