@@ -1,6 +1,9 @@
-//! Phase 6 gate: 100 transfers, and undo after a fault.
+//! Phase 6 gate: 50 transfers, and undo after a fault.
 //!
-//! For each seed 0..100, a fixed xorshift picks a cell (r, c). The crane
+//! Seed `s` transfers cell `s mod cells` (row-major), so 50 seeds cover all
+//! 16 cells three times or more. (Until #61 it was 100 seeds with an
+//! xorshift pick, which repeated cells and left some out; trimmed to save
+//! CI time, with Karl's approval.) The crane
 //! starts at that cell's pre-engage pose (`Sim::set_qpos`, so no trip from
 //! home), runs `Transfer::build(...)`, and settles. Every seed must meet:
 //!   1. once the box has been lifted (underside ≥ water + 1 cm), it never
@@ -8,9 +11,10 @@
 //!   2. it ends inside the exit-tray footprint, level within 5°;
 //!   3. the crane ends at `home()`, every measured joint within `DONE_TOL`.
 //!
-//! Fault case, on every fourth seed (25 runs): abort when the transfer has
-//! finished a random number of its steps, run its `undo()`, and the box must
-//! be back in its own cell within 5 mm, resting on the tray floor.
+//! Fault case, on every fourth seed (13 runs): fault `k` uses cell
+//! `5k mod cells`, 13 different cells; abort when the transfer has finished a
+//! random number of its steps, run its `undo()`, and the box must be back in
+//! its own cell within 5 mm, resting on the tray floor.
 //!
 //! Seeds run on threads, one `Sim` per thread, so the gate fits CI. A
 //! failure names its seed.
@@ -40,7 +44,7 @@ const META: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../scene/generated/rookery.json"
 );
-const SEEDS: u64 = 100;
+const SEEDS: u64 = 50;
 const FAULT_EVERY: u64 = 4;
 const WATER_CLEARANCE: f64 = 0.01;
 const MAX_TILT_DEG: f64 = 5.0;
@@ -166,13 +170,15 @@ impl World {
     }
 }
 
+/// Cell number `k`, row-major, wrapping.
+fn cell(k: u64, meta: &SceneMeta) -> (usize, usize) {
+    let k = (k % (meta.rows * meta.cols) as u64) as usize;
+    (k / meta.cols, k % meta.cols)
+}
+
 /// The normal transfer: lift, carry, place, go home.
 fn transfer(seed: u64, meta: &SceneMeta) -> Result<(), String> {
-    let mut rng = Rng::new(seed);
-    let (r, c) = (
-        rng.below(meta.rows as u64) as usize,
-        rng.below(meta.cols as u64) as usize,
-    );
+    let (r, c) = cell(seed, meta);
     let mut w = World::new(meta, r, c)?;
     let from = w.st.targets;
     let mut t = Transfer::build(from, r, c, meta).map_err(|e| e.to_string())?;
@@ -229,10 +235,8 @@ fn transfer(seed: u64, meta: &SceneMeta) -> Result<(), String> {
 /// The fault case: abort after k completed steps, undo, box back in its cell.
 fn fault(seed: u64, meta: &SceneMeta) -> Result<(), String> {
     let mut rng = Rng::new(seed);
-    let (r, c) = (
-        rng.below(meta.rows as u64) as usize,
-        rng.below(meta.cols as u64) as usize,
-    );
+    // 5 is coprime with the 16 cells, so the 13 faults land on 13 cells.
+    let (r, c) = cell(seed / FAULT_EVERY * 5, meta);
     let mut w = World::new(meta, r, c)?;
     let start = w.sim.snapshot().bodies[w.box_].pos;
     let mut t = Transfer::build(w.st.targets, r, c, meta).map_err(|e| e.to_string())?;
