@@ -1,0 +1,157 @@
+# The large benchmark sweep (row 12.3): overnight on the Air.
+#
+#   caffeinate -i sh -c '(cd scene && uv run python -m scene.bench ../bench/large.toml --out ../runs/large.csv)'
+#
+# Cells per tray x molt rate x detector on one tray, plus the rack, each on
+# four seeds for two weeks.
+
+days = 14.0
+seeds = [7, 11, 23, 42]
+
+[[point]]
+cells = "1x4"
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+cells = "1x4"
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+cells = "1x4"
+molt_rate = 2.0
+detector = "oracle"
+
+[[point]]
+cells = "1x4"
+molt_rate = 2.0
+detector = "camera"
+
+[[point]]
+cells = "1x4"
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+cells = "1x4"
+molt_rate = 3.0
+detector = "camera"
+
+[[point]]
+cells = "2x4"
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+cells = "2x4"
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+cells = "2x4"
+molt_rate = 2.0
+detector = "oracle"
+
+[[point]]
+cells = "2x4"
+molt_rate = 2.0
+detector = "camera"
+
+[[point]]
+cells = "2x4"
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+cells = "2x4"
+molt_rate = 3.0
+detector = "camera"
+
+[[point]]
+cells = "3x4"
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+cells = "3x4"
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+cells = "3x4"
+molt_rate = 2.0
+detector = "oracle"
+
+[[point]]
+cells = "3x4"
+molt_rate = 2.0
+detector = "camera"
+
+[[point]]
+cells = "3x4"
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+cells = "3x4"
+molt_rate = 3.0
+detector = "camera"
+
+[[point]]
+cells = "4x4"
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+cells = "4x4"
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+cells = "4x4"
+molt_rate = 2.0
+detector = "oracle"
+
+[[point]]
+cells = "4x4"
+molt_rate = 2.0
+detector = "camera"
+
+[[point]]
+cells = "4x4"
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+cells = "4x4"
+molt_rate = 3.0
+detector = "camera"
+
+[[point]]
+trays = 3
+cells = "1x4"
+shelf_gap = 0.15
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+trays = 3
+cells = "1x4"
+shelf_gap = 0.15
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+trays = 3
+cells = "1x4"
+shelf_gap = 0.15
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+trays = 3
+cells = "1x4"
+shelf_gap = 0.15
+molt_rate = 3.0
+detector = "camera"
