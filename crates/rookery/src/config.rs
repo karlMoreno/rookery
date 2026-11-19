@@ -7,6 +7,7 @@
 //! detector = "oracle"                   # the only one until Phase 11
 //! max_physics = 900.0                   # seconds of physics a run may use
 //! trays = 3                             # optional: must match the scene
+//! molt_rate = 1.0                       # 3: about an eyestalk-ablated cycle
 //! ```
 //!
 //! Every field has a default, so an empty file is the one-tray farm.
@@ -28,6 +29,8 @@ pub struct Config {
     pub detector: String,
     pub max_physics: f64,
     pub trays: Option<usize>,
+    /// Molt rate multiplier (row 12.2): 3 is about an eyestalk-ablated cycle.
+    pub molt_rate: f64,
 }
 
 impl Default for Config {
@@ -38,6 +41,7 @@ impl Default for Config {
             detector: "oracle".into(),
             max_physics: 900.0,
             trays: None,
+            molt_rate: 1.0,
         }
     }
 }
@@ -58,6 +62,12 @@ impl Config {
     /// Check the config against its scene. Returns the scene metadata.
     pub fn validate(&self) -> Result<SceneMeta, String> {
         let _: DetectorKind = self.detector.parse()?;
+        if !(self.molt_rate.is_finite() && self.molt_rate > 0.0) {
+            return Err(format!(
+                "molt_rate must be a positive number, got {}",
+                self.molt_rate
+            ));
+        }
         if !(self.max_physics.is_finite() && self.max_physics > 0.0) {
             return Err(format!(
                 "max_physics must be a positive number of seconds, got {}",

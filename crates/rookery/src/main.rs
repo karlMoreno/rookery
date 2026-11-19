@@ -206,6 +206,7 @@ mod tests {
             max_physics: 900.0,
             config: None,
             detector: "oracle".into(),
+            molt_rate: 1.0,
             log: dir.clone(),
             scene: cli("scene/generated/rookery.xml"),
             id: Some("t".into()),
@@ -392,6 +393,7 @@ mod tests {
             max_physics: 900.0,
             config: None,
             detector: "oracle".into(),
+            molt_rate: 1.0,
         };
         tour_cmd::run(&args).expect("the run");
         let run = dir.join("r");
@@ -437,6 +439,7 @@ mod tests {
             max_physics: 900.0,
             config: None,
             detector: "oracle".into(),
+            molt_rate: 1.0,
         };
         let t0 = std::time::Instant::now();
         tour_cmd::run(&args).expect("week runs");
@@ -634,6 +637,9 @@ mod tour_cmd {
         /// Molt detector for --tree runs (Phase 11): oracle or camera
         #[arg(long, default_value = "oracle")]
         pub detector: String,
+        /// Molt rate multiplier (row 12.2): 3 is about an eyestalk-ablated cycle
+        #[arg(long, default_value_t = 1.0)]
+        pub molt_rate: f64,
         /// 50 Hz ticks to run (overrides --seconds and the scenario's ticks)
         #[arg(long)]
         pub ticks: Option<u64>,
@@ -662,6 +668,7 @@ mod tour_cmd {
             a.seed = cfg.seed;
             a.max_physics = cfg.max_physics;
             a.detector = cfg.detector;
+            a.molt_rate = cfg.molt_rate;
             return run(&a);
         }
         let Some(script_path) = &args.script else {
@@ -846,8 +853,8 @@ mod tour_cmd {
             windows: mast::ShelfWindows::from_meta(&meta).map_err(|e| e.to_string())?,
         };
         let cells: Vec<rookery_core::CellId> = rookery::cells::all(&meta);
-        let mut world =
-            rookery_core::World::new(rookery_core::LifecycleParams::default(), args.seed, &cells);
+        let params = rookery_core::LifecycleParams::default().scaled(args.molt_rate);
+        let mut world = rookery_core::World::new(params, args.seed, &cells);
         let mover = rookery::shells::ShellMover::subscribe(
             &sim,
             &args.scene.with_extension("json"),
@@ -898,6 +905,17 @@ mod tour_cmd {
             serde_json::to_string_pretty(&hooks.crane().log).map_err(|e| e.to_string())? + "\n",
         )
         .map_err(|e| e.to_string())?;
+        let metrics_json = {
+            let m = rookery::bench::metrics(&hooks.bio_events, hooks.bio_time());
+            let (precision, recall) = rookery::bench::precision_recall(hooks.confusion);
+            serde_json::json!({
+                "molts": m.molts, "missed_windows": m.missed_windows,
+                "latency_mean_s": m.latency_mean_s, "latency_p95_s": m.latency_p95_s,
+                "handlings_per_animal": m.handlings_per_animal,
+                "precision": precision, "recall": recall,
+                "physics_s": runner.sim().snapshot().time,
+            })
+        };
         let summary = serde_json::json!({
             "id": id,
             "tree": tree_path.display().to_string(),
@@ -919,9 +937,12 @@ mod tour_cmd {
             }).collect::<Vec<_>>(),
             "lifecycle": {
                 "seed": args.seed,
-                "interval_mean": rookery_core::LifecycleParams::default().interval_mean(),
-                "interval_sigma": rookery_core::LifecycleParams::default().interval_sigma(),
+                "molt_rate": args.molt_rate,
+                "interval_mean": rookery_core::LifecycleParams::default().scaled(args.molt_rate).interval_mean(),
+                "interval_sigma": rookery_core::LifecycleParams::default().scaled(args.molt_rate).interval_sigma(),
             },
+            // Row 12.2: what the run achieved, as the bench's CSV row has it.
+            "metrics": metrics_json,
             "max_box_displacement": box_moved,
             "shells": hooks.shells.as_ref().map(|m| m.checks.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>()),
         });
@@ -945,7 +966,8 @@ mod tour_cmd {
         }
         // Row 8.6: enough to replay the run without the tree.
         let run_meta =
-            rookery::replay::RunMeta::new(args.seed, &args.scene, tree_path, every, dt_phys)?;
+            rookery::replay::RunMeta::new(args.seed, &args.scene, tree_path, every, dt_phys)?
+                .with_molt_rate(args.molt_rate);
         rookery::replay::write_log(&dir, &run_meta, &hooks.blocks)?;
         let report = format!(
             "run {id}: tree {}, {} ticks over {:.2} s sim, last status {:?}, goal {:?}, {} error(s)\nlog {}\n",
