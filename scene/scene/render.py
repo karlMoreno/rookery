@@ -138,22 +138,33 @@ def write_video(out: Path, model: mujoco.MjModel, times: list[float], rows: list
     return len(frames)
 
 
-def replay_live(model: mujoco.MjModel, times: list[float], rows: list[list[float]]) -> None:
-    """Play the logged ticks in the passive viewer at real time (opens a window)."""
+def replay_live(model: mujoco.MjModel, times: list[float], rows: list[list[float]], speed: float = 1.0) -> None:
+    """Play the logged ticks in the passive viewer (opens a window), ``speed``
+    times real time, starting from the overview camera. When the run ends the
+    last frame stays up until the window is closed, so a demo doesn't vanish."""
     import time
 
     import mujoco.viewer
 
     data = mujoco.MjData(model)
+    speed = max(speed, 1e-3)
+    cam = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "overview")
     with mujoco.viewer.launch_passive(model, data) as v:
+        if cam >= 0:
+            v.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+            v.cam.fixedcamid = cam
         t0 = time.monotonic()
         for t, q in zip(times, rows, strict=True):
             if not v.is_running():
-                break
+                return
             data.qpos[:] = q
             mujoco.mj_forward(model, data)
             v.sync()
-            time.sleep(max(0.0, t - times[0] - (time.monotonic() - t0)))
+            time.sleep(max(0.0, (t - times[0]) / speed - (time.monotonic() - t0)))
+        print("render: replay finished; close the window to exit", flush=True)
+        while v.is_running():
+            v.sync()
+            time.sleep(0.05)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -164,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--run", help="replay a run id logged by `rookery run`")
     ap.add_argument("--runs", type=Path, default=Path("runs"), help="run log directory (default runs/)")
     ap.add_argument("--live", action="store_true", help="with --run: play it in the passive viewer")
+    ap.add_argument("--speed", type=float, default=1.0, help="with --live: times real time (default 1)")
     ap.add_argument("--fps", type=float, default=25.0, help="with --run and a .mp4/.gif --out: frames per second")
     ap.add_argument("--size", default="640x480", help="with --run and a video --out: WxH (default 640x480)")
     ap.add_argument("--start", type=float, default=0.0, help="with a video --out: first second to include")
@@ -173,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.run is not None:
         model, times, rows = load_run(args.run, args.runs)
         if args.live:
-            replay_live(model, times, rows)
+            replay_live(model, times, rows, args.speed)
             return 0
         if args.out is None:
             ap.error("--run needs --out (or --live)")
