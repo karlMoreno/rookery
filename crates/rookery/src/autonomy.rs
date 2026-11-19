@@ -64,6 +64,9 @@ pub struct AutonomyReport {
     pub errors: Vec<String>,
     /// Physics time simulated, seconds (the CI cost).
     pub physics_seconds: f64,
+    /// Camera detections against the oracle's (Phase 11): [both, camera
+    /// only, oracle only, neither]; all zero with the oracle detector.
+    pub confusion: [u64; 4],
 }
 
 /// Run one tray unattended for `args.bio_seconds` of biological time, with
@@ -83,6 +86,18 @@ pub fn run(args: &AutonomyArgs) -> Result<AutonomyReport, String> {
 pub fn run_with(
     args: &AutonomyArgs,
     detector: rookery_core::DetectorKind,
+) -> Result<AutonomyReport, String> {
+    run_params(args, detector, LifecycleParams::default())
+}
+
+/// [`run_with`] with the lifecycle `params` (row 12.2: the molt rate).
+///
+/// # Errors
+/// As [`run`].
+pub fn run_params(
+    args: &AutonomyArgs,
+    detector: rookery_core::DetectorKind,
+    params: LifecycleParams,
 ) -> Result<AutonomyReport, String> {
     let meta_path = args.scene.with_extension("json");
     let meta = SceneMeta::load(&meta_path).map_err(|e| e.to_string())?;
@@ -109,7 +124,7 @@ pub fn run_with(
         None => Box::new(std::io::sink()),
     };
     let cells: Vec<CellId> = crate::cells::all(&meta);
-    let mut world = World::new(LifecycleParams::default(), args.seed, &cells);
+    let mut world = World::new(params, args.seed, &cells);
     let mover = ShellMover::subscribe(&sim, &meta_path, &meta, &mut world)?;
     // Row 10.3: the windows come from the scene and are checked at start-up.
     let windows = mast::ShelfWindows::from_meta(&meta)
@@ -163,6 +178,7 @@ pub fn run_with(
         boxes_in_slots,
         errors,
         physics_seconds: steps as f64 * dt_phys,
+        confusion: hooks.confusion,
     };
     if let Some(dir) = &args.log {
         let summary = serde_json::json!({

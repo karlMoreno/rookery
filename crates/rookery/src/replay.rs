@@ -43,6 +43,13 @@ pub struct RunMeta {
     /// Physics steps per block, and the physics timestep in seconds.
     pub every: usize,
     pub dt_phys: f64,
+    /// The lifecycle's molt rate multiplier (row 12.2); 1 in older logs.
+    #[serde(default = "one")]
+    pub molt_rate: f64,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 impl RunMeta {
@@ -61,7 +68,14 @@ impl RunMeta {
             git_sha: git_sha(),
             every,
             dt_phys,
+            molt_rate: 1.0,
         })
+    }
+
+    /// The same run with molt rate `rate` (row 12.2).
+    pub fn with_molt_rate(mut self, rate: f64) -> Self {
+        self.molt_rate = rate;
+        self
     }
 }
 
@@ -113,7 +127,11 @@ pub fn replay(dir: &Path) -> Result<ReplayReport, String> {
     sim.apply(&Targets(vec![0.0; 4]))
         .map_err(|e| e.to_string())?;
     let cells: Vec<CellId> = crate::cells::all(&scene_meta);
-    let mut world = World::new(LifecycleParams::default(), meta.seed, &cells);
+    let mut world = World::new(
+        LifecycleParams::default().scaled(meta.molt_rate),
+        meta.seed,
+        &cells,
+    );
     let mut mover = ShellMover::subscribe(
         &sim,
         &meta.scene.with_extension("json"),

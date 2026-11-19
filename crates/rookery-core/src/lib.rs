@@ -89,6 +89,26 @@ impl Default for LifecycleParams {
 }
 
 impl LifecycleParams {
+    /// The same animal molting `rate` times as often (row 12.2): the
+    /// intermolt, premolt and hardened stages (and the intermolt's spread)
+    /// shrink by `rate`; molting itself, the soft-shell window, the warning
+    /// and the shell's lifetime stay as they are, because they are hours of
+    /// a body's chemistry, not the cycle. `rate = 3` is roughly the
+    /// eyestalk-ablated animal of the v5 notes. A rate that is not a
+    /// positive finite number leaves the parameters unchanged.
+    pub fn scaled(self, rate: f64) -> Self {
+        if !(rate.is_finite() && rate > 0.0) {
+            return self;
+        }
+        Self {
+            intermolt_mean: self.intermolt_mean / rate,
+            intermolt_sigma: self.intermolt_sigma / rate,
+            premolt_mean: self.premolt_mean / rate,
+            hardened_mean: self.hardened_mean / rate,
+            ..self
+        }
+    }
+
     /// Expected time from one molt to the next: the sum of the stage means.
     pub fn interval_mean(&self) -> f64 {
         Self::STAGES.iter().map(|&s| self.mean(s)).sum()

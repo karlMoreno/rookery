@@ -342,3 +342,34 @@ fn detector_kind_parses_oracle_and_camera() {
             .contains("camera")
     );
 }
+
+#[test]
+fn a_faster_molt_rate_shortens_the_cycle_but_not_the_window() {
+    // Row 12.2.
+    let p = LifecycleParams::default();
+    let q = p.scaled(3.0);
+    assert!((q.intermolt_mean - p.intermolt_mean / 3.0).abs() < 1e-9);
+    assert!((q.premolt_mean - p.premolt_mean / 3.0).abs() < 1e-9);
+    assert_eq!(
+        (q.molting_mean, q.soft_window, q.shell_delay),
+        (p.molting_mean, p.soft_window, p.shell_delay)
+    );
+    assert_eq!(p.scaled(0.0), p);
+    assert_eq!(p.scaled(f64::NAN), p);
+    // About three times the molts in the same time.
+    let cells: Vec<CellId> = (0..16).map(cell).collect();
+    let count = |params: LifecycleParams| {
+        let mut w = World::new(params, 4, &cells);
+        let mut n = 0;
+        for _ in 0..(120.0 * DAY / HOUR) as usize {
+            n += w
+                .step(HOUR)
+                .iter()
+                .filter(|e| matches!(e, Event::Molted(_)))
+                .count();
+        }
+        n
+    };
+    let (slow, fast) = (count(p), count(q));
+    assert!(fast as f64 > 2.2 * slow as f64, "{slow} vs {fast}");
+}
