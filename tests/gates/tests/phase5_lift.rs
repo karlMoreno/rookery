@@ -133,11 +133,12 @@ fn one_lift(seed: u64, meta: &SceneMeta) -> Result<(), String> {
     let mut pre = engaged;
     pre.0[Axis::ArmX.index()] -= PRE;
 
-    // The crane's 4 slides are the last 4 qpos entries, and their values are
-    // the joint coordinates (ref = home in the scene).
+    // The crane's slides are the last CRANE_NQ qpos entries (the four driven
+    // ones, then the fork's middle stage), and their values are the joint
+    // coordinates (ref = home in the scene).
     let mut q = sim.qpos();
     let n = q.len();
-    q[n - 4..].copy_from_slice(&pre.0);
+    q[n - mast::kinematics::CRANE_NQ..].copy_from_slice(&mast::kinematics::crane_qpos(&pre));
     sim.set_qpos(&q).map_err(|e| e.to_string())?;
     let mut st = GantryState {
         targets: pre,
