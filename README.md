@@ -62,6 +62,25 @@ about 10 s from molt to lift, camera precision 1.0 and recall 0.97–1.0.
 | ![missed windows per molt](bench/golden/missed_rate.png) | ![molt to lift](bench/golden/latency_cdf.png) |
 | ![camera precision and recall](bench/golden/precision_recall.png) | |
 
+## Hardware
+
+[`hardware/crane/`](hardware/crane/) is the stacker crane to build: parametric
+build123d CAD with a two-stage telescoping fork and a hook camera, the bill of
+materials ([`bom.csv`](hardware/crane/bom.csv), about $777), a Klipper
+`printer.cfg`, and its own MuJoCo model for a pick-and-place check. It is a
+separate Python package with its own CI workflow (`hardware.yml`). The sim
+above still drives the old straight arm. Fitting the fork to the sim's rack
+comes in later, reviewed changes, and the old arm is kept on the
+`backup/old-crane` branch.
+
+```bash
+cd hardware/crane
+python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+python -m pytest -q                       # 44 tests
+python -m crane pick                      # headless pick and place
+python -m crane view --pick --speed 2     # watch it in the MuJoCo viewer
+```
+
 ## Setup (macOS)
 
 - MuJoCo 3.16.0: `mujoco.framework` in `~/.mujoco`

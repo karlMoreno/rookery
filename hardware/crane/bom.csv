@@ -1,0 +1,38 @@
+section,item,key,qty,unit,unit_usd,total_usd
+Structure and motion,625ZZ bearing (guide rollers),bearing_625,2,ea,0.8,1.6
+Structure and motion,Aluminium flat bar 25 x 6 mm (fork middle stage),alu_flat_25x6,0.4,m,8.0,3.2
+Structure and motion,Cable drag chain 10 x 15 mm,drag_chain_10x15,0.9,m,6.0,5.4
+Structure and motion,Flexible coupler 5 mm to 8 mm,coupler_5_8,1,ea,2.0,2.0
+Structure and motion,"Food-grade shallow tub, about 440 x 440 x 70 mm",water_tub,3,ea,15.0,45.0
+Structure and motion,"GT2 20T pulley, 5 mm bore",gt2_pulley,2,ea,2.0,4.0
+Structure and motion,GT2 6 mm belt,gt2_belt,3.2,m,2.0,6.4
+Structure and motion,"GT2 toothless idler, 5 mm bore",gt2_idler,4,ea,1.5,6.0
+Structure and motion,KFL08 flange bearing (screw top support),kfl08,1,ea,2.0,2.0
+Structure and motion,M3 heat-set insert,heat_insert_m3,23,ea,0.05,1.15
+Structure and motion,M3/M4/M5 screw kit + T-nuts,fastener_kit,1,set,30.0,30.0
+Structure and motion,MGN12 linear rail (telescopic fork stages),mgn12_rail,0.7,m,30.0,21.0
+Structure and motion,MGN12H carriage block,mgn12h_block,4,ea,7.0,28.0
+Structure and motion,PETG filament,petg,1.75,kg,20.0,35.0
+Structure and motion,T8 anti-backlash nut,t8_nut,1,ea,4.0,4.0
+Structure and motion,"T8 lead screw, 8 mm lead",t8_screw,0.9,m,18.0,16.2
+Structure and motion,V-slot aluminium extrusion 2020,extrusion_2020,11.9,m,6.0,71.4
+Structure and motion,V-slot aluminium extrusion 2040 (floor rail),extrusion_2040,1.1,m,12.0,13.2
+Structure and motion,"V-slot wheel, Delrin, 625 bearings, with eccentric spacer",v_wheel,8,ea,1.6,12.8
+"Compute, electronics, power",24 V 150 W sealed power brick,psu_24v,1,ea,35.0,35.0
+"Compute, electronics, power","BTT SKR Pico (RP2040, 4x TMC2209)",skr_pico,1,ea,35.0,35.0
+"Compute, electronics, power",Buck converter 24 V to 5 V 5 A (Pi),buck_5v,1,ea,12.0,12.0
+"Compute, electronics, power","E-stop mushroom switch, NC",estop,1,ea,8.0,8.0
+"Compute, electronics, power",GFCI plug or RCD adapter (water nearby),gfci,1,ea,25.0,25.0
+"Compute, electronics, power","Microswitch endstop (home Y, Z, X)",microswitch,3,ea,1.5,4.5
+"Compute, electronics, power","NEMA14 round stepper, short (arm X)",nema14,1,ea,15.0,15.0
+"Compute, electronics, power","NEMA17 stepper, 48 mm (rail Y, mast Z)",nema17,2,ea,13.0,26.0
+"Compute, electronics, power","Raspberry Pi 5, 8 GB, active cooler, 64 GB card",pi5,1,ea,105.0,105.0
+"Compute, electronics, power","Silicone wire, ferrules, Wago, fuses, PG7 glands",wiring_kit,1,set,35.0,35.0
+Sensors,18650 cell + holder + TP4056 USB-C charger,cell_18650,1,set,8.0,8.0
+Sensors,"CSI ribbon cable for Pi 5, 1 m",csi_cable_1m,1,ea,6.0,6.0
+Sensors,"CSI-to-HDMI extender pair + 3 m slim HDMI cable (hook camera, through the drag chains)",csi_hdmi_extender,1,ea,25.0,25.0
+Sensors,DS18B20 waterproof temperature probe,ds18b20,1,ea,3.0,3.0
+Sensors,ESP32-C3 SuperMini (Wi-Fi water sensor node),esp32c3,1,ea,4.0,4.0
+Sensors,Gravity-style analog TDS probe + board (waste proxy),tds_probe,1,ea,12.0,12.0
+Sensors,Gravity-style analog pH probe + board,ph_probe,1,ea,40.0,40.0
+Sensors,Raspberry Pi Camera Module 3 Wide (NoIR if you add IR light),pi_camera3_wide,2,ea,35.0,70.0
