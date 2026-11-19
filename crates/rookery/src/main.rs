@@ -50,6 +50,27 @@ enum Cmd {
     /// Play a tour script (--script) or a behavior tree (--tree) on the crane,
     /// logging every tick (Phase 3 and Phase 4 demos).
     Run(Box<tour_cmd::RunArgs>),
+    /// Run one benchmark point unattended and print its CSV row (row 12.3;
+    /// scene/scene/bench.py drives it)
+    BenchRow {
+        /// Scene to load. Its metadata is the .json beside it.
+        #[arg(long)]
+        scene: Option<PathBuf>,
+        /// Molt rate multiplier
+        #[arg(long, default_value_t = 1.0)]
+        molt_rate: f64,
+        /// oracle or camera
+        #[arg(long, default_value = "oracle")]
+        detector: String,
+        #[arg(long, default_value_t = 7)]
+        seed: u64,
+        /// Biological days counted (an 8 h tail follows)
+        #[arg(long, default_value_t = 7.0)]
+        days: f64,
+        /// Print the CSV header instead
+        #[arg(long)]
+        header: bool,
+    },
     /// Replay a logged run from its targets and diff the event log (row 8.6)
     Replay {
         /// The run's log directory, runs/<id>
@@ -83,6 +104,34 @@ fn main() -> ExitCode {
             _,
         ) => rookery::lift_trials::summary(scene, *seeds, *lift_speed)
             .map(|v| serde_json::to_string(&v).unwrap_or_default() + "\n"),
+        (
+            Some(Cmd::BenchRow {
+                scene,
+                molt_rate,
+                detector,
+                seed,
+                days,
+                header,
+            }),
+            _,
+        ) => {
+            if *header {
+                Ok(format!("{}\n", rookery::bench::CSV_HEADER))
+            } else {
+                match (scene, detector.parse::<rookery_core::DetectorKind>()) {
+                    (None, _) => Err("bench-row needs --scene".to_string()),
+                    (_, Err(e)) => Err(e),
+                    (Some(scene), Ok(detector)) => rookery::bench::row(&rookery::bench::Point {
+                        scene: scene.clone(),
+                        molt_rate: *molt_rate,
+                        detector,
+                        seed: *seed,
+                        days: *days,
+                    })
+                    .map(|r| r + "\n"),
+                }
+            }
+        }
         (Some(Cmd::Replay { dir }), _) => rookery::replay::replay(dir).and_then(|r| {
             let line = format!(
                 "replay {}: {} blocks, {} events recorded, {} replayed\n",

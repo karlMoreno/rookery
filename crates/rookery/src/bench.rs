@@ -30,7 +30,8 @@ pub struct Metrics {
     /// percentile (nearest rank), over the harvested molts.
     pub latency_mean_s: f64,
     pub latency_p95_s: f64,
-    /// Boxes lifted per molt: 1 when every molt is handled once.
+    /// Times a molted animal's box was lifted, per molt in the horizon: 1
+    /// when every molt is handled once (a later molt's lift doesn't count).
     pub handlings_per_animal: f64,
 }
 
@@ -39,20 +40,31 @@ pub fn metrics(events: &[(f64, Event)], horizon: f64) -> Metrics {
     let mut lat = Vec::new();
     let (mut molts, mut missed, mut lifted) = (0, 0, 0);
     for (k, &(t, e)) in events.iter().enumerate() {
-        match e {
-            Event::Molted(c) if t <= horizon => {
-                molts += 1;
-                if let Some(&(tl, _)) = events[k..]
-                    .iter()
-                    .find(|&&(_, el)| el == Event::BoxLifted(c))
-                {
-                    lat.push(tl - t);
-                }
-            }
-            Event::WindowMissed(_) => missed += 1,
-            Event::BoxLifted(_) => lifted += 1,
-            _ => {}
+        let Event::Molted(c) = e else { continue };
+        if t > horizon {
+            continue;
         }
+        molts += 1;
+        // This molt's lifts and miss: from it up to the cell's next molt.
+        let rest = &events[k + 1..];
+        let until = rest
+            .iter()
+            .position(|&(_, el)| el == Event::Molted(c))
+            .unwrap_or(rest.len());
+        let mine = &rest[..until];
+        let lifts: Vec<f64> = mine
+            .iter()
+            .filter(|&&(_, el)| el == Event::BoxLifted(c))
+            .map(|&(tl, _)| tl)
+            .collect();
+        lifted += lifts.len();
+        if let Some(&tl) = lifts.first() {
+            lat.push(tl - t);
+        }
+        missed += mine
+            .iter()
+            .filter(|&&(_, el)| el == Event::WindowMissed(c))
+            .count();
     }
     lat.sort_by(f64::total_cmp);
     let mean = if lat.is_empty() {
@@ -177,7 +189,8 @@ mod tests {
             (60.0, Event::WindowMissed(cell(1))),
             (70.0, Event::Molted(cell(2))),
             (170.0, Event::BoxLifted(cell(2))),
-            (900.0, Event::Molted(cell(3))), // after the horizon
+            (900.0, Event::Molted(cell(3))),    // after the horizon
+            (950.0, Event::BoxLifted(cell(3))), // its lift doesn't count
         ];
         let m = metrics(&ev, 100.0);
         assert_eq!((m.molts, m.missed_windows), (3, 1));

@@ -1,0 +1,64 @@
+# The small benchmark sweep (row 12.3): CI runs it in the clean-clone job,
+# under 3 minutes. Every point runs lua/trees/autonomy.lua unattended.
+#
+#   (cd scene && uv run python -m scene.bench ../bench/small.toml --out ../results.csv)
+#
+# A point's scene is built into a temp dir from these fields (never into
+# scene/generated/): trays, cells ("RxC" per tray) and shelf_gap.
+
+days = 7.0
+seed = 7
+
+[[point]]
+cells = "1x4"
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+cells = "1x4"
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+cells = "1x4"
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+cells = "1x4"
+molt_rate = 3.0
+detector = "camera"
+
+[[point]]
+cells = "2x4"
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+cells = "2x4"
+molt_rate = 3.0
+detector = "oracle"
+
+[[point]]
+cells = "2x4"
+molt_rate = 1.0
+detector = "camera"
+
+[[point]]
+cells = "2x4"
+molt_rate = 3.0
+detector = "camera"
+
+[[point]]
+trays = 3
+cells = "1x4"
+shelf_gap = 0.15
+molt_rate = 1.0
+detector = "oracle"
+
+[[point]]
+trays = 3
+cells = "1x4"
+shelf_gap = 0.15
+molt_rate = 1.0
+detector = "camera"
