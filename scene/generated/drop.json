@@ -12,6 +12,7 @@
     "solimp": null,
     "solref": null
   },
+  "crane_look": null,
   "crawfish": true,
   "crawfish_length": 0.08,
   "crawfish_mass": 0.03,

@@ -74,6 +74,23 @@ python -m crane --spec presets/rookery_rack3.toml check
 python -m crane --spec presets/rookery_rack3.toml pick --cell 2 0 3
 ```
 
+### The crane's look in Rookery's scene
+
+Rookery's sim draws this crane with its CAD meshes. `meshes/rookery/` holds
+them, built from `rookery_tray.toml` (the preset whose fork matches the sim's
+limits): `look.xml` (the moving bodies and their meshes), `meshes/*.obj` and
+`anchor.json` (the rack's centre along the rail, and where a handle sits on
+the hook). Rookery's scene builder hangs the meshes on its crane as look-only
+geoms, so the sim's physics doesn't change. `tests/test_look.py` fails when
+the folder is stale; after changing the crane or the preset, run
+
+```bash
+python -m crane --spec presets/rookery_tray.toml look
+```
+
+then regenerate Rookery's scenes (`scene/generated/` is protected, so that
+needs Karl's approval).
+
 ## Other commands
 
 ```bash
@@ -85,7 +102,7 @@ python -m crane pick       # run a pick-and-place in MuJoCo; exits 1 if the box 
 python -m crane view       # MuJoCo viewer: drag the sliders in the Control panel (right side)
 python -m crane view --pick --speed 2    # watch a pick and place, then drive it yourself
 python -m crane view --inset cam_tier_0 # inset another camera (--inset none for no inset)
-python -m pytest -q        # 56 tests (4 known xfails), about 2 min
+python -m pytest -q        # 58 tests (3 known xfails), about 2.5 min
 ```
 
 On a Mac, `view` needs MuJoCo's `mjpython` launcher and switches to it by

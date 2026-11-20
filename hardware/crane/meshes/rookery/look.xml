@@ -1,0 +1,65 @@
+<mujoco model="rookery_crane_look">
+  <asset>
+    <mesh name="crane_frame_0" file="meshes/crane_frame_0.obj" scale="0.001 0.001 0.001" />
+    <mesh name="crane_frame_1" file="meshes/crane_frame_1.obj" scale="0.001 0.001 0.001" />
+    <mesh name="crane_frame_2" file="meshes/crane_frame_2.obj" scale="0.001 0.001 0.001" />
+    <mesh name="crane_frame_3" file="meshes/crane_frame_3.obj" scale="0.001 0.001 0.001" />
+    <mesh name="crane_frame_4" file="meshes/crane_frame_4.obj" scale="0.001 0.001 0.001" />
+    <mesh name="hook_0" file="meshes/hook_0.obj" scale="0.001 0.001 0.001" />
+    <mesh name="arm_0" file="meshes/arm_0.obj" scale="0.001 0.001 0.001" />
+    <mesh name="arm_1" file="meshes/arm_1.obj" scale="0.001 0.001 0.001" />
+    <mesh name="arm_2" file="meshes/arm_2.obj" scale="0.001 0.001 0.001" />
+    <mesh name="fork_mid_0" file="meshes/fork_mid_0.obj" scale="0.001 0.001 0.001" />
+    <mesh name="fork_mid_1" file="meshes/fork_mid_1.obj" scale="0.001 0.001 0.001" />
+    <mesh name="fork_mid_2" file="meshes/fork_mid_2.obj" scale="0.001 0.001 0.001" />
+    <mesh name="carriage_0" file="meshes/carriage_0.obj" scale="0.001 0.001 0.001" />
+    <mesh name="carriage_1" file="meshes/carriage_1.obj" scale="0.001 0.001 0.001" />
+    <mesh name="carriage_2" file="meshes/carriage_2.obj" scale="0.001 0.001 0.001" />
+    <mesh name="carriage_3" file="meshes/carriage_3.obj" scale="0.001 0.001 0.001" />
+    <mesh name="carriage_4" file="meshes/carriage_4.obj" scale="0.001 0.001 0.001" />
+    <mesh name="truck_0" file="meshes/truck_0.obj" scale="0.001 0.001 0.001" />
+    <mesh name="truck_1" file="meshes/truck_1.obj" scale="0.001 0.001 0.001" />
+    <mesh name="truck_2" file="meshes/truck_2.obj" scale="0.001 0.001 0.001" />
+    <mesh name="truck_3" file="meshes/truck_3.obj" scale="0.001 0.001 0.001" />
+  </asset>
+  <worldbody>
+    <body name="crane_frame" pos="0 0 0">
+      <geom type="mesh" mesh="crane_frame_0" contype="0" conaffinity="0" group="1" rgba="0.1 0.45 0.25 1" mass="0" />
+      <geom type="mesh" mesh="crane_frame_1" contype="0" conaffinity="0" group="1" rgba="0.15 0.15 0.17 1" mass="0" />
+      <geom type="mesh" mesh="crane_frame_2" contype="0" conaffinity="0" group="1" rgba="0.78 0.8 0.83 1" mass="0" />
+      <geom type="mesh" mesh="crane_frame_3" contype="0" conaffinity="0" group="1" rgba="0.85 0.1 0.1 1" mass="0" />
+      <geom type="mesh" mesh="crane_frame_4" contype="0" conaffinity="0" group="1" rgba="0.95 0.62 0.1 1" mass="0" />
+    </body>
+    <body name="truck" pos="0.032 -0.055 0.45">
+      <joint name="rail_y" type="slide" axis="0 1 0" range="-0.055 1.065" limited="true" ref="-0.055" damping="20" armature="0.01" />
+      <body name="carriage" pos="0 0 0">
+        <joint name="mast_z" type="slide" axis="0 0 1" range="0.113 0.958" limited="true" ref="0.45" damping="20" armature="0.01" />
+        <body name="arm" pos="0 0 0">
+          <joint name="arm_x" type="slide" axis="1 0 0" range="0.032 0.8132" limited="true" ref="0.032" damping="20" armature="0.01" />
+          <body name="hook" pos="0 0 0">
+            <joint name="lift" type="slide" axis="0 0 1" range="-0.001 0.001" limited="true" ref="0" />
+            <geom type="mesh" mesh="hook_0" contype="0" conaffinity="0" group="1" rgba="0.95 0.62 0.1 1" mass="0" />
+          </body>
+          <geom type="mesh" mesh="arm_0" contype="0" conaffinity="0" group="1" rgba="0.1 0.45 0.25 1" mass="0" />
+          <geom type="mesh" mesh="arm_1" contype="0" conaffinity="0" group="1" rgba="0.62 0.64 0.68 1" mass="0" />
+          <geom type="mesh" mesh="arm_2" contype="0" conaffinity="0" group="1" rgba="0.95 0.62 0.1 1" mass="0" />
+        </body>
+        <body name="fork_mid" pos="0 0 0">
+          <joint name="arm_mid" type="slide" axis="1 0 0" range="0.032 0.4226" limited="true" ref="0.032" damping="20" armature="0.01" />
+          <geom type="mesh" mesh="fork_mid_0" contype="0" conaffinity="0" group="1" rgba="0.62 0.64 0.68 1" mass="0" />
+          <geom type="mesh" mesh="fork_mid_1" contype="0" conaffinity="0" group="1" rgba="0.78 0.8 0.83 1" mass="0" />
+          <geom type="mesh" mesh="fork_mid_2" contype="0" conaffinity="0" group="1" rgba="0.95 0.62 0.1 1" mass="0" />
+        </body>
+        <geom type="mesh" mesh="carriage_0" contype="0" conaffinity="0" group="1" rgba="0.15 0.15 0.17 1" mass="0" />
+        <geom type="mesh" mesh="carriage_1" contype="0" conaffinity="0" group="1" rgba="0.62 0.64 0.68 1" mass="0" />
+        <geom type="mesh" mesh="carriage_2" contype="0" conaffinity="0" group="1" rgba="0.75 0.6 0.3 1" mass="0" />
+        <geom type="mesh" mesh="carriage_3" contype="0" conaffinity="0" group="1" rgba="0.78 0.8 0.83 1" mass="0" />
+        <geom type="mesh" mesh="carriage_4" contype="0" conaffinity="0" group="1" rgba="0.95 0.62 0.1 1" mass="0" />
+      </body>
+      <geom type="mesh" mesh="truck_0" contype="0" conaffinity="0" group="1" rgba="0.15 0.15 0.17 1" mass="0" />
+      <geom type="mesh" mesh="truck_1" contype="0" conaffinity="0" group="1" rgba="0.62 0.64 0.68 1" mass="0" />
+      <geom type="mesh" mesh="truck_2" contype="0" conaffinity="0" group="1" rgba="0.78 0.8 0.83 1" mass="0" />
+      <geom type="mesh" mesh="truck_3" contype="0" conaffinity="0" group="1" rgba="0.95 0.62 0.1 1" mass="0" />
+    </body>
+  </worldbody>
+</mujoco>

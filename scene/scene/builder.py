@@ -38,6 +38,7 @@ import json
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from dataclasses import asdict
+from pathlib import Path
 
 from .spec import SceneSpec
 
@@ -156,6 +157,27 @@ def look_at(eye: tuple[float, float, float], target: tuple[float, float, float])
     rx, ry = rx / n, ry / n
     ux, uy, uz = ry * fz - rz * fy, rz * fx - rx * fz, rx * fy - ry * fx  # up = right x forward
     return [("pos", num(*eye)), ("xyaxes", num(rx, ry, rz, ux, uy, uz))]
+
+
+#: Where the committed scenes live; ``SceneSpec.crane_look`` is relative to it.
+GENERATED = Path(__file__).resolve().parent.parent / "generated"
+#: MuJoCo geom groups for the CAD look. The viewer and offscreen renders show
+#: groups 0-2 by default and hide 3-5: the CAD meshes go in 2, and the crane's
+#: plain collision shapes move to 4 (still colliding, still hit by rays).
+#: `Sim::ray` skips group 2, so the camera detector sees what it saw before.
+LOOK_GROUP = 2
+HIDDEN_GROUP = 4
+#: The crane bodies the look hangs meshes on: CAD body -> sim body. The CAD
+#: crane_frame (rails, posts, top beam) hangs on the world.
+LOOK_BODIES = {"crane_frame": None, "truck": "crane_truck", "carriage": "crane_carriage",
+               "arm": "crane_arm", "hook": "crane_hook", "fork_mid": "crane_fork_mid"}
+#: The CAD fork's joints -> the sim's (the CAD hook's `lift` is locked at 0).
+LOOK_JOINTS = {"rail_y": "rail_y", "mast_z": "mast_z", "arm_x": "arm_x", "lift": "hook_lift"}
+
+
+def _vec(text: str) -> tuple[float, float, float]:
+    x, y, z = (float(v) for v in text.split())
+    return (x, y, z)
 
 
 class MjcfBuilder:
@@ -648,6 +670,104 @@ class MjcfBuilder:
         self._el(keyframe, "key", [("name", "home"), ("ctrl", num(*(h[n] for n in GANTRY_RANGES)))])
         return self
 
+    def cad_look(self) -> MjcfBuilder:
+        """Hang the CAD crane's meshes on the sim's crane (crane swap, look).
+
+        Pattern: Adapter. The CAD crane (hardware/crane) and the sim's crane
+        have the same five moving bodies and slide axes, but their frames and
+        joint zeros differ, so this maps one onto the other once, at home:
+
+        ```text
+          q_cad = q_sim + c        c.rail_y = rack centre (CAD) - rack centre (sim, 0)
+                                   c.arm_x  = folded (CAD) - folded (sim)
+                                   c.mast_z = TRAY_WALL (CAD heights are above its floor,
+                                              the sim's above the tray floor)
+          T     = seat_sim - seat_cad          the handle's seat on the hook coincides
+          mesh pos in sim body b = cad_b(q_cad) + T - sim_b(q_sim)
+        ```
+
+        Each body's offset is constant (same axes, same joint travel), so the
+        meshes ride the sim's joints. They are look-only: group LOOK_GROUP,
+        no contact, no mass (every crane body has an explicit inertial). The
+        plain crane shapes stay as they were, moved to HIDDEN_GROUP.
+        """
+        s = self.spec
+        if s.crane_look is None:
+            return self
+        d = Path(s.crane_look)
+        src = d if d.is_absolute() else GENERATED / d
+        look = ET.parse(src / "look.xml").getroot()
+        anchor = json.loads((src / "anchor.json").read_text(encoding="utf-8"))
+        h = GANTRY_HOME
+
+        # CAD bodies: home position, and the slide joints above each.
+        cad: dict[str, tuple[tuple[float, float, float], list[tuple[str, tuple[float, float, float], float]], ET.Element]] = {}
+        ranges: dict[str, tuple[float, float]] = {}
+
+        def walk(el: ET.Element, at: tuple[float, float, float], joints: list) -> None:
+            for b in el.findall("body"):
+                p = tuple(a + o for a, o in zip(at, _vec(b.get("pos", "0 0 0")), strict=True))
+                js = list(joints)
+                for j in b.findall("joint"):
+                    js.append((j.get("name"), _vec(j.get("axis")), float(j.get("ref", "0"))))
+                    lo, hi = (float(v) for v in j.get("range").split())
+                    ranges[j.get("name")] = (lo, hi)
+                cad[b.get("name")] = (p, js, b)
+                walk(b, p, js)
+
+        walk(look.find("worldbody"), (0.0, 0.0, 0.0), [])
+        sim_q = {"rail_y": h["rail_y"], "mast_z": h["mast_z"], "arm_x": h["arm_x"], "hook_lift": h["hook_lift"]}
+        c = {"rail_y": anchor["rack_center_y"], "arm_x": ranges["arm_x"][0] - GANTRY_RANGES["arm_x"][0],
+             "mast_z": TRAY_WALL, "hook_lift": 0.0}
+        q = {cj: sim_q[sj] + c[sj] for cj, sj in LOOK_JOINTS.items()}
+        lo = ranges["arm_x"][0]
+        q["arm_mid"] = lo + (q["arm_x"] - lo) / 2
+
+        def cad_at(name: str) -> list[float]:
+            p, js, _ = cad[name]
+            out = list(p)
+            for jn, axis, ref in js:
+                for k in range(3):
+                    out[k] += axis[k] * (q[jn] - ref)
+            return out
+
+        truck = (s.rail_line_x, h["rail_y"], 0.0)
+        carriage = (truck[0], truck[1], h["mast_z"])
+        arm = (carriage[0] + h["arm_x"], carriage[1], carriage[2])
+        sim = {"crane_truck": truck, "crane_carriage": carriage, "crane_arm": arm,
+               "crane_hook": (arm[0], arm[1], arm[2] + h["hook_lift"]), "crane_fork_mid": arm}
+        hook = sim["crane_hook"]
+        seat_sim = (hook[0] + s.hook_finger / 2, hook[1], hook[2] + s.hook_radius)
+        seat_cad = [a + b for a, b in zip(cad_at("hook"), anchor["hook_seat"], strict=True)]
+        t = [a - b for a, b in zip(seat_sim, seat_cad, strict=True)]
+
+        asset = self.root.find("asset")
+        if asset is None:
+            asset = ET.Element("asset")
+            self.root.insert(list(self.root).index(self.worldbody), asset)
+        files = {m.get("name"): m for m in look.find("asset").findall("mesh")}
+        bodies = {b.get("name"): b for b in self.worldbody.iter("body")}
+        for cname, sname in LOOK_BODIES.items():
+            at = cad_at(cname)
+            base = (0.0, 0.0, 0.0) if sname is None else sim[sname]
+            off = num(*(a + tt - bb for a, tt, bb in zip(at, t, base, strict=True)))
+            parent = self.worldbody if sname is None else bodies[sname]
+            for g in cad[cname][2].findall("geom"):
+                mesh = g.get("mesh")
+                m = files[mesh]
+                self._el(asset, "mesh", [("name", f"cad_{mesh}"), ("file", f"{s.crane_look}/{m.get('file')}"),
+                                         ("scale", m.get("scale"))])
+                self._el(parent, "geom", [("name", f"cad_{mesh}"), ("type", "mesh"), ("mesh", f"cad_{mesh}"),
+                                          ("pos", off), ("contype", "0"), ("conaffinity", "0"),
+                                          ("group", str(LOOK_GROUP)), ("mass", "0"), ("rgba", g.get("rgba"))])
+        crane = {"floor_rail", "guide_rail", "guide_post_yneg", "guide_post_ypos"}
+        for b in sim:
+            crane |= {g.get("name") for g in bodies[b].findall("geom")}
+        for g in self.worldbody.iter("geom"):
+            if g.get("name") in crane and g.get("type") != "mesh":
+                g.set("group", str(HIDDEN_GROUP))
+        return self
+
     def build(self) -> str:
         """Serialise: two-space indent, a trailing newline, and no XML declaration or timestamp."""
         tree = ET.ElementTree(self.root)
@@ -671,7 +791,7 @@ def build_scene(spec: SceneSpec) -> str:
     """The scene for ``spec``: the named preset, or else the farm."""
     if spec.preset == "drop":
         return MjcfBuilder(spec).drop().build()
-    return MjcfBuilder(spec).header().tray().water().cells().crawfish().shells().exit_tray().crane_frame().gantry().build()
+    return MjcfBuilder(spec).header().tray().water().cells().crawfish().shells().exit_tray().crane_frame().gantry().cad_look().build()
 
 
 def spec_from_json(text: str) -> SceneSpec:

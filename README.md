@@ -98,10 +98,10 @@ Phase 1 demo. This drops a 0.1 m box onto a plane, and the last line is the box'
 cargo run -p rookery -- scene/generated/drop.xml
 ```
 
-Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray, the crane rails and, since Phase 3, the crane), then loads it (`nbody 55`: world, tray_0, 16 boxes, 16 crawfish, 16 shed shells parked under the tray, and the five crane bodies: truck, carriage, arm, hook and the fork's middle stage):
+Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray, the crane rails and, since Phase 3, the crane), then loads it (`nbody 55`: world, tray_0, 16 boxes, 16 crawfish, 16 shed shells parked under the tray, and the five crane bodies: truck, carriage, arm, hook and the fork's middle stage). `--crane-look` draws the crane with its CAD meshes from `hardware/crane/meshes/rookery/`; they are look-only, so physics is the same without it:
 
 ```bash
-(cd scene && uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08)
+(cd scene && uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08 --crane-look)
 ```
 
 ```bash
