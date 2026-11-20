@@ -1,0 +1,43 @@
+# The crane fitted to Rookery's rack3 scene (scene/generated/rack3.json):
+# three shelves one box deep (1 x 4 cells), 120 mm boxes at 0.15 m pitch,
+# 12 mm handles 45 mm above the rim. Only the numbers that differ from
+# crane.toml are here; tests/test_rookery_fit.py checks them against the scene.
+#
+# Frame: crane z = Rookery z + 0.10 (the bottom tray floor sits at 0.10 here and
+# at 0 in Rookery). Shelf pitch 0.315 is shelf_gap 0.18 in Rookery (fit study
+# D4: at 0.15 the carried fork top meets the shelf above; the sim port then
+# found 0.17 leaves a box 3 mm under the exit plate's top, so 0.18).
+#
+#   python -m crane --spec presets/rookery_rack3.toml check
+
+[rack]
+tier_floors = [0.10, 0.415, 0.73]
+tub_length = 0.61
+tub_depth = 0.16
+tub_height = 0.08          # Rookery tray wall: 0.05 m water + 0.03 m freeboard
+cells_x = 1
+cells_y = 4
+cell_pitch = 0.15
+water_depth = 0.05
+
+[box]
+box_size = 0.12
+box_height = 0.08
+handle_height = 0.045
+handle_dia = 0.012
+
+[crane]
+rail_length = 1.40
+mast_length = 1.05         # the top shelf at 0.73 needs the hook at about 0.96 m
+guide_rail_z = 1.14
+
+[hook]
+lift_clear = 0.015         # fits the 0.315 m shelf pitch with the 45 mm shank and margin
+
+[motion]
+vmax_mast = 0.15           # fit study D3: at 0.06 m/s the rack gate misses top-shelf windows
+lead_screw_lead_mm = 16.0  # T8x16 (4-start): 0.15 m/s within 600 rpm. Keep the Z motor powered while holding a box
+
+[sensors]
+populated_tiers = [0, 1, 2]   # boxes on every shelf, as in rack3
+sensor_nodes = 3

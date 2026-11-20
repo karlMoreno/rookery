@@ -218,7 +218,9 @@ class CraneSpec:
                 p.append(f"tier {t}: carried arm top {arm_top:.3f} m hits the tub above at {ceiling:.3f} m; raise the tier pitch")
 
         # A carried box must pass over the other boxes' handles in the same tub.
-        for t in range(len(floors)):
+        # It leaves its cell along -X, over the rows nearer the aisle, so a tub
+        # one box deep (Rookery's rack3) has no handles in its way.
+        for t in (range(len(floors)) if self.cells_x > 1 else ()):
             box_bottom = self.carry_z(t) + self.handle_dia / 2 - self.box_height - self.handle_height
             handles_top = self.handle_z(t) + self.handle_dia / 2 + 0.003   # bar plus its posts
             if box_bottom - handles_top < 0.006:

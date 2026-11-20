@@ -59,6 +59,21 @@ The STEP files open in any CAD program (FreeCAD, Fusion, Onshape). On a Mac,
 select an STL in Finder and press Space for a quick look. Print from
 `out/stl/`, not `out/parts/`: the print files are already turned flat.
 
+## Rookery presets
+
+`presets/` holds the crane fitted to Rookery's scenes (fit study, row 2.0 of the
+crane swap plan): `rookery_rack3.toml` for rack3's three one-deep shelves and
+`rookery_tray.toml` for the single 4 x 4 tray, with 0.49 m fork stages.
+`tests/test_rookery_fit.py` checks them against `scene/generated/`. Two known
+gaps are strict xfails until later rows: rack3's shelf pitch (regenerated with
+`shelf_gap` 0.18), and the J-hook setting Rookery's 120 mm boxes 8-33 mm off
+the exit slot (the hook becomes Rookery's 30 mm saddle).
+
+```bash
+python -m crane --spec presets/rookery_rack3.toml check
+python -m crane --spec presets/rookery_rack3.toml pick --cell 2 0 3
+```
+
 ## Other commands
 
 ```bash
@@ -70,7 +85,7 @@ python -m crane pick       # run a pick-and-place in MuJoCo; exits 1 if the box 
 python -m crane view       # MuJoCo viewer: drag the sliders in the Control panel (right side)
 python -m crane view --pick --speed 2    # watch a pick and place, then drive it yourself
 python -m crane view --inset cam_tier_0 # inset another camera (--inset none for no inset)
-python -m pytest -q        # 44 tests, about 45 s
+python -m pytest -q        # 56 tests (4 known xfails), about 2 min
 ```
 
 On a Mac, `view` needs MuJoCo's `mjpython` launcher and switches to it by
