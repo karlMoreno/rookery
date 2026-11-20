@@ -79,7 +79,6 @@ def test_the_folded_fork_overhangs_less_than_the_old_arm(preset, scene):
     assert s.fork_overhang < OLD_ARM_OVERHANG
 
 
-@pytest.mark.xfail(strict=True, reason="rack3 is regenerated with shelf_gap 0.18 in PR #69 (fit study D4); remove this mark there")
 def test_rack3_shelf_pitch_matches_the_scene():
     s, m = load("rookery_rack3.toml", "rack3.json")
     floors = [f - s.tier_floors[0] for f in s.tier_floors]
