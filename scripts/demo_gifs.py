@@ -81,10 +81,10 @@ if "patrol" in which:
     gif("patrol.gif", "patrol", 0, 60, 4.0, label=lambda k, t: f"patrol: visiting every cell (4x speed)  t = {t:5.1f} s")
 if "lift" in which:
     m, s, times, rows = load("transfer")
-    gif("lift.gif", "transfer", 3, 16, 1.0, cam=([-0.075, 0.075, 0.12], 0.55, 200, -15),
-        label=lambda k, t: f"lift: hook slides under the handle, lifts box (1, 2)  t = {t:4.1f} s")
+    gif("lift.gif", "transfer", 3, 12, 1.0, cam=([-0.075, 0.075, 0.12], 0.55, 200, -15),
+        label=lambda k, t: f"lift: the fork reaches in, drops its hook on the handle, lifts box (1, 2)  t = {t:4.1f} s")
 if "transfer" in which:
-    gif("transfer.gif", "transfer", 0, 31.5, 2.0, label=lambda k, t: f"transfer: box (1, 2) to the exit tray (2x speed)  t = {t:4.1f} s")
+    gif("transfer.gif", "transfer", 0, 33.5, 2.0, label=lambda k, t: f"transfer: box (1, 2) to the exit tray (2x speed)  t = {t:4.1f} s")
 if "fault" in which:
     gif("fault_undo.gif", "fault", 0, 28.5, 2.0,
         label=lambda k, t: ("fault injected at 14 s: the transfer is undone" if t >= 14.0 else "transfer under way...") + f"  t = {t:4.1f} s")

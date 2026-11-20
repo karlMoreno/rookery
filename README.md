@@ -98,7 +98,7 @@ Phase 1 demo. This drops a 0.1 m box onto a plane, and the last line is the box'
 cargo run -p rookery -- scene/generated/drop.xml
 ```
 
-Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray, the crane rails and, since Phase 3, the crane), then loads it (`nbody 54`: world, tray_0, 16 boxes, 16 crawfish, 16 shed shells parked under the tray, and the four crane bodies):
+Phase 2 demo. This builds the farm scene (one tray, 4x4 mesh boxes with hook handles, an exit tray, the crane rails and, since Phase 3, the crane), then loads it (`nbody 55`: world, tray_0, 16 boxes, 16 crawfish, 16 shed shells parked under the tray, and the five crane bodies: truck, carriage, arm, hook and the fork's middle stage):
 
 ```bash
 (cd scene && uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08)
@@ -115,7 +115,7 @@ Every clip is a real run, replayed offscreen from its `qpos.csv` log (`scripts/d
 | | |
 |---|---|
 | ![patrol](docs/patrol.gif) | **Patrol** (Phase 4). A Lua behavior tree sends the crane to every cell in turn; Rust plans and clamps each move. Shown at 4x. |
-| ![lift](docs/lift.gif) | **Lift** (Phase 5). The J-hook slides under box (1, 2)'s handle and lifts it with its crawfish inside, under 1° of roll. |
+| ![lift](docs/lift.gif) | **Lift** (Phase 5). The telescoping fork reaches over box (1, 2), the mast lowers its hook onto the handle, and the box comes up with its crawfish inside, under 1° of roll. |
 | ![transfer](docs/transfer.gif) | **Transfer** (Phase 6). Box (1, 2) goes to the exit tray as one undoable command, and no other box moves. Shown at 2x. |
 | ![fault and undo](docs/fault_undo.gif) | **Fault and undo** (Phase 6). A fault injected 14 s in replaces the transfer with its undo, so the box goes back where it came from. Shown at 2x. |
 | ![molt](docs/molt.gif) | **Molt** (Phase 7). Biology fast-forwards between events; when a crawfish molts, its shed shell lands in its box, and a day later it is eaten. |

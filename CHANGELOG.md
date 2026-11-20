@@ -2,6 +2,10 @@
 
 Each phase of the build proposal ended with a tag; `v0.1.0` gathers them.
 
+## [Unreleased]
+
+- **Telescoping-fork crane** (#67, #68, #69): the `hardware/crane` package (CAD, `crane.toml`, BOM, MuJoCo pick test) and its Rookery presets; the sim's crane is now that fork. The mast lowers the hook onto a handle (`hook_lift` is locked at 0), the arm folds instead of retracting, the fork's middle stage follows the arm, and there is a hook camera (`cam_hook`). New limits: `ARM_X` 0.07..0.85, `MAST_Z` 0.05..0.85, rail 0.17 m back from the exit tray, rack3 shelf gap 0.18 m. The old crane is kept on `backup/old-crane`.
+
 ## [0.1.0] - unreleased
 
 The twelve-phase build (Phase 9, feeding, deferred to Phase 13+).
