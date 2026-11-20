@@ -5,6 +5,7 @@ Each phase of the build proposal ended with a tag; `v0.1.0` gathers them.
 ## [Unreleased]
 
 - **Telescoping-fork crane** (#67, #68, #69): the `hardware/crane` package (CAD, `crane.toml`, BOM, MuJoCo pick test) and its Rookery presets; the sim's crane is now that fork. The mast lowers the hook onto a handle (`hook_lift` is locked at 0), the arm folds instead of retracting, the fork's middle stage follows the arm, and there is a hook camera (`cam_hook`). New limits: `ARM_X` 0.07..0.85, `MAST_Z` 0.05..0.85, rail 0.17 m back from the exit tray, rack3 shelf gap 0.18 m. The old crane is kept on `backup/old-crane`.
+- **The crane looks like its CAD**: `python -m crane look` exports the crane's meshes to `hardware/crane/meshes/rookery/`, and `scene.cli --crane-look` hangs them on the sim's crane as look-only geoms (group 2, no mass, no contact; the plain shapes still collide, hidden in group 4). `Sim::ray` sees through group 2, so the camera detector is unchanged.
 
 ## [0.1.0] - unreleased
 

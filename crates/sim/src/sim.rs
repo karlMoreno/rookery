@@ -411,7 +411,8 @@ impl Sim {
     /// first geom it hits and that geom's index, or `None` if it hits
     /// nothing. Geoms in `skip` are seen through: the ray goes on from just
     /// past them (row 11.2: the camera looks through the water and the box's
-    /// handle). Geom group 3, the hidden shell pad, is never hit. Uses the
+    /// handle). Geom groups 2 (the crane's look-only CAD meshes) and 3 (the
+    /// hidden shell pad) are never hit. Uses the
     /// positions of the last forward pass, so call it after `step`.
     ///
     /// Row 11.2's depth images are built from these, one ray per pixel: no
@@ -422,8 +423,10 @@ impl Sim {
             return None;
         }
         let d = [dir[0] / n, dir[1] / n, dir[2] / n];
-        // Groups 0-5; 3 is the hidden shell pad (scene/scene/builder.py).
-        let groups: [u8; 6] = [1, 1, 1, 0, 1, 1];
+        // Groups 0-5 (scene/scene/builder.py): 2 is the crane's CAD look
+        // (look-only meshes, so the camera sees the same scene with or
+        // without it) and 3 the hidden shell pad; both are seen through.
+        let groups: [u8; 6] = [1, 1, 0, 0, 1, 1];
         let (mut p, mut travelled) = (from, 0.0);
         for _ in 0..16 {
             let mut geom: c_int = -1;
@@ -767,6 +770,7 @@ mod tests {
                  <geom name="floor" type="plane" size="1 1 .1"/>
                  <geom name="glass" type="box" size=".2 .2 .01" pos="0 0 .5" contype="0" conaffinity="0"/>
                  <geom name="pad" type="box" size=".2 .2 .01" pos="0 0 .3" group="3"/>
+                 <geom name="look" type="box" size=".2 .2 .01" pos="0 0 .2" group="2" contype="0" conaffinity="0"/>
                </worldbody></mujoco>"#,
         );
         sim.step();
@@ -777,7 +781,8 @@ mod tests {
             .expect("hits");
         assert_eq!(g, id("glass"));
         assert!((d - 0.49).abs() < 1e-9, "{d}");
-        // Through the glass; the group-3 pad is never hit; the floor at z = 0.
+        // Through the glass; the group-3 pad and the group-2 look are never
+        // hit; the floor at z = 0.
         let (d, g) = sim
             .ray([0.0, 0.0, 1.0], [0.0, 0.0, -1.0], &[id("glass")])
             .expect("hits");

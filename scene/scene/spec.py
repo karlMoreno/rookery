@@ -216,6 +216,12 @@ class SceneSpec:
     guide_rail_height: float = 1.0
     #: ``None`` builds the farm. A name from ``PRESETS`` builds that scene instead.
     preset: Literal["drop"] | None = None
+    #: The crane's CAD look (hardware/crane, ``python -m crane look``): a
+    #: directory with ``look.xml``, ``anchor.json`` and ``meshes/``, relative to
+    #: ``scene/generated/`` (where the scenes are written) or absolute. ``None``
+    #: draws the crane as plain boxes. Either way the crane's collision shapes,
+    #: masses and joints are the same: the meshes are look-only.
+    crane_look: str | None = None
 
     # ---------------- derived (change the inputs, not these) ----------------
 

@@ -6,7 +6,7 @@ It writes the MJCF to ``--out`` and the spec as JSON beside it
 (``rookery.xml`` → ``rookery.json``). The JSON is the recipe: ``--check``
 rebuilds every ``generated/*.xml`` from it and fails on any difference.
 
-    uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08   # generated/rookery.xml
+    uv run python -m scene.cli --trays 1 --cells 4x4 --shelf-gap 0.08 --crane-look   # generated/rookery.xml
     uv run python -m scene.cli --preset drop                            # generated/drop.xml
     uv run python -m scene.cli --check
 """
@@ -24,6 +24,8 @@ from .spec import PRESETS, SceneSpec, SpecError
 #: than the cwd, because GLFW on macOS changes the cwd once a window opens.
 GENERATED = Path(__file__).resolve().parent.parent / "generated"
 DEFAULT_OUT = GENERATED / "rookery.xml"
+#: The CAD crane's look (hardware/crane, `python -m crane look`), relative to GENERATED.
+DEFAULT_LOOK = "../../hardware/crane/meshes/rookery"
 
 
 def parse_cells(text: str) -> tuple[int, int]:
@@ -42,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
                     metavar="RxC", help="cells per tray, rows x cols (default 4x4)")
     ap.add_argument("--shelf-gap", type=float, default=SceneSpec.shelf_gap,
                     help="clear space above the handles, in metres (default %(default)s)")
+    ap.add_argument("--crane-look", nargs="?", const=DEFAULT_LOOK, default=None, metavar="DIR",
+                    help=f"draw the crane with its CAD meshes (default DIR {DEFAULT_LOOK}, relative to generated/)")
     ap.add_argument("--preset", choices=PRESETS, default=None, help="build a named scene instead")
     ap.add_argument("--out", type=Path, default=None,
                     help="output MJCF path (default generated/rookery.xml, or generated/<preset>.xml)")
@@ -53,7 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def spec_from_args(args: argparse.Namespace) -> SceneSpec:
     rows, cols = args.cells
-    return SceneSpec(trays=args.trays, rows=rows, cols=cols, shelf_gap=args.shelf_gap, preset=args.preset)
+    return SceneSpec(trays=args.trays, rows=rows, cols=cols, shelf_gap=args.shelf_gap, preset=args.preset,
+                     crane_look=None if args.preset else args.crane_look)
 
 
 def write_scene(spec: SceneSpec, out: Path) -> Path:

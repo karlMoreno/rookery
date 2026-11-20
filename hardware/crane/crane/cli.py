@@ -7,6 +7,7 @@
     pick     run a pick-and-place in MuJoCo to prove the hook geometry
     show     send the assembly to the OCP CAD Viewer (same as `python show.py`)
     view     open MuJoCo's viewer to drive the joints, or `view --pick` to watch a pick
+    look     write meshes/rookery/: the crane meshes Rookery's scene hangs on its crane (presets/rookery_tray.toml)
 
 Pattern: Command (for the CLI itself). Each subcommand is one small function
 registered in COMMANDS, so adding a command is adding a function.
@@ -149,6 +150,15 @@ def cmd_show(args) -> None:
     show_crane(args.spec, pose_args=args.pose, rack=not args.no_rack)
 
 
+def cmd_look(args) -> None:
+    from crane.look import write_look
+
+    s = _spec(args)
+    world, reg = build_crane(s)
+    paths = write_look(s, world, reg, Path(args.out))
+    print(f"wrote {paths['look']} and {paths['anchor']}")
+
+
 def cmd_view(args) -> None:
     from crane.live import view
     view(args.spec, args.out, play=args.pick, cell=args.cell, slot=args.slot, speed=args.speed,
@@ -156,7 +166,7 @@ def cmd_view(args) -> None:
 
 
 COMMANDS = {"check": cmd_check, "build": cmd_build, "bom": cmd_bom, "parts": cmd_parts, "pick": cmd_pick, "show": cmd_show,
-            "view": cmd_view}
+            "view": cmd_view, "look": cmd_look}
 
 
 def main(argv=None) -> None:
@@ -190,6 +200,8 @@ def main(argv=None) -> None:
     vw.add_argument("--inset", default="cam_hook", help="camera shown bottom-right (cam_hook, cam_tier_0, none)")
     vw.add_argument("--classic", action="store_true", help="MuJoCo's own app instead (plain python, no inset)")
     vw.add_argument("--out", default=str(ROOT / "out"))
+    lk = sub.add_parser("look", help="the crane's meshes for Rookery's scene (use --spec presets/rookery_tray.toml)")
+    lk.add_argument("--out", default=str(ROOT / "meshes" / "rookery"))
     args = ap.parse_args(argv)
     COMMANDS[args.cmd](args)
 

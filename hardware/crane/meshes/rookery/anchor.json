@@ -1,0 +1,9 @@
+{
+  "preset": "rookery_tray.toml",
+  "rack_center_y": 0.355,
+  "hook_seat": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}
