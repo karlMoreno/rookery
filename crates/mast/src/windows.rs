@@ -12,10 +12,10 @@
 //! ```
 
 use crate::kinematics::{HOOK_CLEARANCE, SceneMeta};
-use crate::limits::{ARM_THICKNESS, HOOK_LIFT, MAST_Z, Range, ShelfWindows};
+use crate::limits::{ARM_THICKNESS, FORK_ABOVE_HOOK, HOOK_LIFT, MAST_Z, Range, ShelfWindows};
 
-/// Room kept between the lifted box's handle top and the floor of the tray
-/// above, metres.
+/// Room kept between the lifted box's handle top (or the fork's top) and
+/// the floor of the tray above, metres.
 pub const UNDER_SHELF_MARGIN: f64 = 0.01;
 /// Tray floor thickness, metres (the builder's `TRAY_WALL`).
 pub const TRAY_FLOOR: f64 = 0.01;
@@ -72,9 +72,12 @@ impl ShelfWindows {
             let base = meta.shelf_base(t).unwrap_or(0.0);
             let lo = base + meta.box_size[2] + HOOK_CLEARANCE;
             let hi = match meta.shelf_base(t + 1) {
+                // The tallest thing above the hook decides: the lifted
+                // handle, or the fork, which rides FORK_ABOVE_HOOK over it
+                // (crane swap, fit study D4).
                 Some(next) => {
                     next - TRAY_FLOOR
-                        - (handle_top - engage_above_base + HOOK_LIFT.hi)
+                        - (handle_top - engage_above_base + HOOK_LIFT.hi).max(FORK_ABOVE_HOOK)
                         - UNDER_SHELF_MARGIN
                 }
                 None => MAST_Z.hi,

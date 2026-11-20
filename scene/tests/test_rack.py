@@ -35,7 +35,7 @@ def test_tray_0_keeps_its_names_and_the_others_add_the_tray():
     for n in ("box_0_2", "crawfish_0_2", "shell_0_2", "box_1_0_2", "crawfish_2_0_3", "shell_2_0_0",
               "tray_0", "tray_1", "tray_2"):
         assert mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n) >= 0, n
-    assert m.nbody == 1 + 3 + 3 * 4 * 3 + 4  # world, trays, boxes/crawfish/shells, crane
+    assert m.nbody == 1 + 3 + 3 * 4 * 3 + 5  # world, trays, boxes/crawfish/shells, crane (with the fork's middle stage)
 
 
 def test_free_joints_are_boxes_then_crawfish_then_shells_tray_major():
@@ -76,7 +76,7 @@ def test_shelves_are_a_pitch_apart_with_the_gap_clear_and_listed_in_the_json():
 
 
 @pytest.mark.parametrize("kw,msg", [({"trays": 3, "rows": 1}, "too small for stacked trays"),
-                                    ({"trays": 4, "rows": 1, "shelf_gap": 0.15}, "above its 0.80 m reach"),
+                                    ({"trays": 4, "rows": 1, "shelf_gap": 0.15}, "above its 0.85 m reach"),
                                     ({"trays": 3, "shelf_gap": 0.15}, "one box deep")])
 def test_a_rack_that_does_not_fit_is_refused(kw, msg):
     with pytest.raises(SpecError, match=msg):

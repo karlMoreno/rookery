@@ -30,7 +30,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 use crate::JointTargets;
-use crate::limits::{MAST_Z, Range, ShelfWindows};
+use crate::limits::{ARM_X, MAST_Z, Range, ShelfWindows};
 
 /// Hook finger length along +X from the arm tip, metres. Matches
 /// `HOOK_FINGER` in `scene/scene/builder.py`.
@@ -49,9 +49,39 @@ pub const HOOK_WIDTH: f64 = 0.03;
 /// The hook's vertical envelope, from the finger's underside to the top of
 /// the tip: 23 mm. It must fit the gap between a box's top and its handle.
 pub const HOOK_ENVELOPE: f64 = 2.0 * HOOK_RADIUS + HOOK_TIP_RISE;
-/// Home pose (rail_y, mast_z, arm_x, hook_lift). Matches `GANTRY_HOME` in
-/// `scene/scene/builder.py`, which is the MJCF `ref` and the `home` keyframe.
-pub const HOME: JointTargets = JointTargets([0.0, 0.45, 0.0, 0.0]);
+/// Home pose (rail_y, mast_z, arm_x, hook_lift): the fork folded. Matches
+/// `GANTRY_HOME` in `scene/scene/builder.py`, which is the MJCF `ref` and the
+/// `home` keyframe.
+pub const HOME: JointTargets = JointTargets([0.0, 0.45, FOLDED, 0.0]);
+
+/// The folded fork's extension, metres: the shortest `arm_x` there is.
+pub const FOLDED: f64 = ARM_X.lo;
+
+/// The fork's middle stage (joint `arm_mid`, not driven) for a fork extended
+/// to `arm_x`. The belts move the middle stage half as far as the top stage,
+/// and the scene's `<equality>` holds it there. Its joint value is a
+/// coordinate like the others: `FOLDED` when folded.
+///
+/// ```text
+///   carriage stage ══════════              fixed
+///   middle stage      ══════════           moves u = (arm_x − FOLDED) / 2
+///   top stage + hook       ══════════╮     moves 2u
+/// ```
+pub fn arm_mid_for(arm_x: f64) -> f64 {
+    FOLDED + (arm_x - FOLDED) / 2.0
+}
+
+/// How many qpos entries the crane has at the end of the scene's qpos: the
+/// four driven slides (rail_y, mast_z, arm_x, hook_lift), then `arm_mid`.
+pub const CRANE_NQ: usize = 5;
+
+/// The crane's tail of qpos for targets `t`, with the middle stage where the
+/// equality holds it. For tests and trials that place the crane directly:
+/// `q[n - CRANE_NQ..].copy_from_slice(&crane_qpos(&t))`.
+pub fn crane_qpos(t: &JointTargets) -> [f64; CRANE_NQ] {
+    let [y, z, x, h] = t.0;
+    [y, z, x, h, arm_mid_for(x)]
+}
 
 /// The parts of `rookery.json` the kinematics needs.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -221,7 +251,7 @@ pub fn forward(t: &JointTargets, meta: &SceneMeta) -> [f64; 3] {
     [meta.derived.rail_line_x + x, y, z + h]
 }
 
-/// The home pose: truck centred, carriage at 0.45 m, arm retracted, hook down.
+/// The home pose: truck centred, carriage at 0.45 m, fork folded.
 pub fn home() -> JointTargets {
     HOME
 }

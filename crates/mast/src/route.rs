@@ -7,20 +7,20 @@
 //! ```text
 //!   leave (if the arm is out):  ArmX → arm − PRE   finger out from under the handle
 //!                               MastZ → travel     above every handle
-//!                               ArmX → 0           retract
+//!                               ArmX → FOLDED      fold the fork
 //!   approach Cell / Exit:       MastZ → travel
 //!                               RailY → y
 //!                               ArmX → arm − PRE   finger in front of the handle, inside the box
 //!                               MastZ → engage     hook envelope centred under the handle
 //!                               ArmX → arm         handle over mid-finger
-//!   Home:                       MastZ → 0.45, RailY → 0, HookLift → 0
+//!   Home:                       MastZ → 0.45, RailY → 0 (fork already folded)
 //! ```
 //!
 //! Moves whose goal equals the planned position are skipped.
 
 use serde::{Deserialize, Serialize};
 
-use crate::kinematics::{self, HOOK_FINGER, SceneMeta};
+use crate::kinematics::{self, FOLDED, HOOK_FINGER, SceneMeta};
 use crate::limits::ARM_RETRACTED;
 use crate::{Axis, JointTargets, MoveCommand};
 
@@ -168,12 +168,12 @@ impl Plan {
         let rack = meta.is_rack();
         // Leave: back the finger out from under any handle, rise, retract.
         if self.at.0[Axis::ArmX.index()] > ARM_RETRACTED {
-            let back = (self.at.0[Axis::ArmX.index()] - PRE).max(0.0);
+            let back = (self.at.0[Axis::ArmX.index()] - PRE).max(FOLDED);
             self.go(Axis::ArmX, back);
             if !rack {
                 self.go(Axis::MastZ, travel.max(self.at.0[Axis::MastZ.index()]));
             }
-            self.go(Axis::ArmX, 0.0);
+            self.go(Axis::ArmX, FOLDED);
         }
         if let Pose::Transfer(..) | Pose::TransferOn(..) = pose {
             return Err(RouteError::NotARoute(pose));
@@ -221,7 +221,7 @@ impl Plan {
             let [y, z, x, _] = target.0;
             self.go(Axis::MastZ, approach_z(z, meta));
             self.go(Axis::RailY, y);
-            self.go(Axis::ArmX, (x - PRE).max(0.0));
+            self.go(Axis::ArmX, (x - PRE).max(FOLDED));
             self.go(Axis::MastZ, z);
             self.go(Axis::ArmX, x);
             return Ok(());
@@ -229,7 +229,7 @@ impl Plan {
         let [y, z, x, _] = target.0;
         self.go(Axis::MastZ, travel);
         self.go(Axis::RailY, y);
-        self.go(Axis::ArmX, (x - PRE).max(0.0));
+        self.go(Axis::ArmX, (x - PRE).max(FOLDED));
         self.go(Axis::MastZ, z);
         self.go(Axis::ArmX, x);
         Ok(())

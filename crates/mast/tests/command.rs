@@ -122,7 +122,7 @@ fn home_is_in_range_and_retracted() {
     for (i, v) in h.0.iter().enumerate() {
         assert!(RANGES[i].contains(*v));
     }
-    assert_eq!(h.0[Axis::ArmX.index()], 0.0);
+    assert_eq!(h.0[Axis::ArmX.index()], mast::kinematics::FOLDED);
 }
 
 /// Tick `cmd` with perfect tracking (measured q = target) until it stops.
@@ -148,10 +148,10 @@ fn move_then_undo_returns_the_exact_prior_targets() {
     let (status, ticks) = run(&mut mv, &mut st);
     assert_eq!(status, CmdStatus::Done);
     assert_eq!(st.targets.0[Axis::ArmX.index()], 0.6);
-    // 0.6 m at 0.20 m/s and 50 Hz takes 150 ticks, plus one to confirm.
-    // 150 ticks at cruise speed, plus the acceleration ramps (row 6.6).
-    assert!((150..=180).contains(&ticks), "{ticks} ticks");
-    assert_eq!(mv.start(), Some(0.0));
+    // 0.53 m (folded 0.07 to 0.6) at 0.20 m/s and 50 Hz takes 133 ticks at
+    // cruise speed, plus the acceleration ramps (row 6.6).
+    assert!((133..=163).contains(&ticks), "{ticks} ticks");
+    assert_eq!(mv.start(), Some(mast::kinematics::FOLDED));
 
     let mut back = mv.undo();
     assert_eq!(run(back.as_mut(), &mut st).0, CmdStatus::Done);
@@ -267,9 +267,12 @@ fn command_log_round_trips_through_json() {
 }
 
 #[test]
-fn passive_hook_fits_its_stroke() {
+fn passive_hook_engages_with_the_mast() {
+    // The fork's hook is rigid (crane swap, D1): its stroke is locked at 0 and
+    // the mast does the engage, inside the mast's range.
     let h = PassiveHook;
-    assert!(h.engage_dz() > 0.0 && RANGES[Axis::HookLift.index()].contains(h.engage_dz()));
+    assert_eq!(RANGES[Axis::HookLift.index()].height(), 0.0);
+    assert!(h.engage_dz() > 0.0 && h.engage_dz() < RANGES[Axis::MastZ.index()].height());
     assert_eq!(h.reach(), HOOK_FINGER);
 }
 

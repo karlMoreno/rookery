@@ -7,28 +7,35 @@
 //!
 //! Joint coordinates, in metres, in the scene frame from `scene/generated/rookery.json`
 //! (the tray floor's top is z = 0, the grid is centred, rows run along +X, and the
-//! floor rail runs along Y at x = `rail_line_x` ≈ -0.59):
+//! floor rail runs along Y at x = `rail_line_x` ≈ -0.64):
 //!
 //! ```text
 //!   axis       joint      meaning                                   range
 //!   RailY      rail_y     truck position along the floor rail (Y)   -0.40 .. 0.40
-//!   MastZ      mast_z     lift-carriage (hook) height (Z)            0.05 .. 0.80
-//!   ArmX       arm_x      arm extension from the mast toward +X      0.00 .. 0.85
-//!   HookLift   hook_lift  hook stroke above the carriage (Z)         0.00 .. 0.03
+//!   MastZ      mast_z     lift-carriage (hook) height (Z)            0.05 .. 0.85
+//!   ArmX       arm_x      fork extension from the mast toward +X     0.07 .. 0.85
+//!   HookLift   hook_lift  locked: the fork's hook is rigid (Z)       0.00 .. 0.00
 //! ```
 //!
 //! Where the numbers come from (Phase 2 scene, 4x4 cells, 0.15 m pitch):
 //! - `RAIL_Y`: cell centres span y = ±0.225 and the rail is 0.90 m long
 //!   (±0.45), so the truck stays 5 cm inside the rail ends.
 //! - `MAST_Z`: the throwaway preview showed a top-shelf pick needs about 0.80 m
-//!   (0.763 m plus margin). Phase 1 trays only need ~0.2 m. The range is sized
-//!   for Phase 10's three stacked trays, so it never has to grow.
-//! - `ARM_X`: from the rail (x ≈ -0.59) to the far row (x = +0.225) is 0.815 m,
-//!   and the exit tray (x ≈ -0.395) is 0.195 m, so 0.85 m reaches both with margin.
-//! - `HOOK_LIFT`: 3 cm. With the arm out, the arm and hook need
-//!   `ARM_THICKNESS + hook_lift` of clear height, which is 0.07 m at full lift and fits
-//!   Phase 2's 0.08 m shelf gap. A 0.10 m lift would not (kinematics study).
-//!   The preview engaged a handle with 1.2 cm of lift plus 1 cm of clearance.
+//!   (0.763 m plus margin). Phase 1 trays only need ~0.2 m. Raised to 0.85 m
+//!   for the fork (crane swap): with rack3's shelf gap at 0.17 the top shelf
+//!   sits at 0.61 m, its lift ends at 0.80 m, and the box still has to rise
+//!   over its tray's front wall. The real crane's 1.05 m mast reaches 0.86 m.
+//! - `ARM_X`: the reach arm is a two-stage telescoping fork (crane swap, rows
+//!   2.3-2.5; hardware in `hardware/crane`, preset `rookery_tray.toml`). Folded,
+//!   the hook's tip sits 0.11 m in front of the rail line, short of the exit
+//!   tray's aisle edge at 0.17 m, so the mast may move with the fork folded.
+//!   Extended, it reaches 0.85 m: the far row needs 0.845 m (rail x ≈ -0.64,
+//!   set back 0.17 m from the exit tray so a box on the folded fork clears it,
+//!   to x = +0.225, minus half the finger). The old straight arm went 0.00 .. 0.85.
+//! - `HOOK_LIFT`: 0. The fork's hook is rigid, as on the real crane: it takes a
+//!   handle by raising the mast (`lift::ENGAGE_SPEED`), not with a stroke of its
+//!   own. The joint stays in the scene, locked, so targets keep four axes.
+//!   It was 0.00 .. 0.03 with the old arm.
 //! - `MAX_VEL`: the preview's tuned speeds (cart.toml `[motion]`).
 //!
 //! Gravity sag: these are *target* limits. The mast's position actuator sags
@@ -69,11 +76,11 @@ pub struct Aabb {
 /// Truck position along the floor rail, metres.
 pub const RAIL_Y: Range = Range::new(-0.40, 0.40);
 /// Lift-carriage height, metres.
-pub const MAST_Z: Range = Range::new(0.05, 0.80);
-/// Arm extension toward +X, metres.
-pub const ARM_X: Range = Range::new(0.00, 0.85);
-/// Hook stroke, metres.
-pub const HOOK_LIFT: Range = Range::new(0.00, 0.03);
+pub const MAST_Z: Range = Range::new(0.05, 0.85);
+/// Fork extension toward +X, metres: folded .. fully extended.
+pub const ARM_X: Range = Range::new(0.07, 0.85);
+/// Hook stroke, metres. Locked: the fork's hook engages with the mast.
+pub const HOOK_LIFT: Range = Range::new(0.00, 0.00);
 
 /// Ranges indexed like [`crate::Axis`]: rail, mast, arm, hook.
 pub const RANGES: [Range; 4] = [RAIL_Y, MAST_Z, ARM_X, HOOK_LIFT];
@@ -93,8 +100,13 @@ pub const WORKSPACE: Aabb = Aabb {
 /// only into a gap taller than this.
 pub const ARM_THICKNESS: f64 = 0.04;
 /// Arm extensions at or below this count as retracted: clear of every tray,
-/// so the mast may move freely, metres.
-pub const ARM_RETRACTED: f64 = 0.05;
+/// so the mast may move freely, metres. Just past the folded fork (0.07): the
+/// hook's tip then stays behind the exit tray's aisle edge (0.17).
+pub const ARM_RETRACTED: f64 = 0.075;
+/// How far the fork's top rises above the hook, metres: a 45 mm shank from the
+/// hook to the fork's underside plus 27 mm of fork (rail, block, bar). Under a
+/// shelf the fork, not the handle, is the tallest thing (fit study D4).
+pub const FORK_ABOVE_HOOK: f64 = 0.072;
 
 /// Mast heights at which the arm may extend: one window per shelf, derived
 /// from the scene (Phase 3 has one tray, Phase 10 three). With the hook

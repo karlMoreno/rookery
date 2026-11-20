@@ -11,7 +11,8 @@ import mujoco
 import pytest
 
 from scene import SceneSpec
-from scene.builder import GANTRY_HOME, GANTRY_RANGES, build_scene
+from scene.builder import FORK_ABOVE_HOOK, GANTRY_HOME, GANTRY_RANGES, LOCK_EPS, build_scene, gantry_range
+from scene.spec import FORK_ABOVE_HOOK_FOR_SPEC
 
 REPO = Path(__file__).resolve().parents[2]
 JOINTS = ["rail_y", "mast_z", "arm_x", "hook_lift"]
@@ -70,10 +71,50 @@ def test_mjcf_ranges_match_limits_rs():
     for name in JOINTS:
         j = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, name)
         assert j >= 0, f"no joint {name}"
-        assert list(m.jnt_range[j]) == pytest.approx(rust[name], abs=1e-6), name
         assert list(GANTRY_RANGES[name]) == pytest.approx(rust[name], abs=1e-6), name
+        # A joint limits.rs locks to one value (hook_lift) gets ±LOCK_EPS,
+        # because MuJoCo needs lo < hi; every other range is copied exactly.
+        lo, hi = rust[name]
+        want = [lo - LOCK_EPS, hi + LOCK_EPS] if hi - lo < 1e-12 else [lo, hi]
+        assert list(gantry_range(name)) == pytest.approx(want, abs=1e-9), name
+        assert list(m.jnt_range[j]) == pytest.approx(want, abs=1e-6), name
         a = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
-        assert list(m.actuator_ctrlrange[a]) == pytest.approx(rust[name], abs=1e-6), name
+        assert list(m.actuator_ctrlrange[a]) == pytest.approx(want, abs=1e-6), name
+
+
+def test_fork_height_matches_mast():
+    """Drift check (crane swap): the fork's height above the hook, in the
+    builder and the spec, equals limits.rs FORK_ABOVE_HOOK."""
+    rust = dump_limits()["fork_above_hook"]
+    assert FORK_ABOVE_HOOK == pytest.approx(rust)
+    assert FORK_ABOVE_HOOK_FOR_SPEC == pytest.approx(rust)
+
+
+def test_the_middle_stage_follows_half_the_top_stage():
+    """The fork's belts, as an <equality>: arm_mid = folded + (arm_x − folded) / 2."""
+    m, d = load()
+    folded = GANTRY_HOME["arm_x"]
+    a = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, "arm_x")
+    for goal in (GANTRY_RANGES["arm_x"][1], 0.4, folded):
+        d.ctrl[a] = goal
+        for _ in range(3000):
+            mujoco.mj_step(m, d)
+        assert q(m, d, "arm_x") == pytest.approx(goal, abs=DONE_TOL)
+        assert q(m, d, "arm_mid") == pytest.approx(folded + (q(m, d, "arm_x") - folded) / 2, abs=1e-3)
+
+
+def test_qpos_ends_with_the_crane():
+    """mast::kinematics::CRANE_NQ: the four driven slides, then arm_mid, last in qpos."""
+    m, _ = load()
+    names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_JOINT, j) for j in range(m.njnt)]
+    assert names[-5:] == [*JOINTS, "arm_mid"]
+    assert m.jnt_qposadr[m.njnt - 1] == m.nq - 1
+
+
+def test_the_hook_camera_rides_the_fork():
+    m, _ = load()
+    c = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_CAMERA, "cam_hook")
+    assert c >= 0 and m.cam_bodyid[c] == mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "crane_arm")
 
 
 def test_joint_values_are_the_limits_coordinates():
@@ -95,7 +136,7 @@ def test_home_holds_without_sag():
         assert abs(q(m, d, name) - GANTRY_HOME[name]) < DONE_TOL, name
 
 
-@pytest.mark.parametrize("name, step", [("rail_y", 0.3), ("mast_z", 0.3), ("arm_x", 0.3), ("hook_lift", 0.03)])
+@pytest.mark.parametrize("name, step", [("rail_y", 0.3), ("mast_z", 0.3), ("arm_x", 0.3)])
 def test_step_settles_in_one_second_without_overshoot(name, step):
     m, d = load()
     a = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, name)

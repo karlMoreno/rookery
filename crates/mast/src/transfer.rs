@@ -11,16 +11,16 @@
 //! ```text
 //!   Transfer::build(from, r, c, meta) = MacroCommand [
 //!     route(from → Cell(r, c))            engage: finger under the handle
-//!     LiftSequence                         hook +2 cm, mast +8 cm
+//!     LiftSequence                         mast +2 cm slowly (engage), then +8 cm
 //!     loaded route → above the exit        travel height clears the box's underside (6.3)
 //!     LowerUntilContact                    the box settles on the exit cradle (6.6)
-//!     release                              hook down, finger out from under the handle
+//!     release                              mast down 2 cm slowly, finger out from under the handle
 //!     route → Home
 //!   ]
 //! ```
 
-use crate::kinematics::{self, SceneMeta};
-use crate::lift::{LIFT_HEIGHT, LiftSequence, MacroCommand};
+use crate::kinematics::{self, FOLDED, SceneMeta};
+use crate::lift::{ENGAGE_SPEED, LIFT_HEIGHT, LiftSequence, MacroCommand};
 use crate::route::{self, Pose, RouteError, travel_z};
 use crate::{Axis, Command, JointTargets, MoveCommand};
 
@@ -107,9 +107,9 @@ impl Transfer {
         let engage = route::route(at, Pose::CellOn(t, r, c), meta)?;
         push(&mut steps, engage, &mut at);
         let engaged = at;
+        let engage_dz = crate::Hook::engage_dz(&crate::PassiveHook);
         let lift = LiftSequence::build(engaged, LIFT_HEIGHT);
-        at.0[Axis::HookLift.index()] += crate::Hook::engage_dz(&crate::PassiveHook);
-        at.0[Axis::MastZ.index()] += LIFT_HEIGHT;
+        at.0[Axis::MastZ.index()] += engage_dz + LIFT_HEIGHT;
         steps.push(Box::new(lift));
         let exit = match slot {
             None => kinematics::exit_pose(meta),
@@ -130,7 +130,7 @@ impl Transfer {
             .map_or(lifted, |hi| (hi - route::WINDOW_EPS).max(lifted));
         let carry = vec![
             MoveCommand::new(Axis::MastZ, clear),
-            MoveCommand::new(Axis::ArmX, 0.0).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::ArmX, FOLDED).with_speed(CARRY_SPEED),
             // Reach over the slot as high as shelf 0's window allows: a
             // hanging box sits about 2 cm lower on the hook than a resting
             // one, so at the exit's engage height it would strike the plate's
@@ -138,8 +138,10 @@ impl Transfer {
             MoveCommand::new(Axis::MastZ, exit_reach_z).with_speed(CARRY_SPEED),
             MoveCommand::new(Axis::RailY, exit.0[Axis::RailY.index()]).with_speed(CARRY_SPEED),
             MoveCommand::new(Axis::ArmX, exit.0[Axis::ArmX.index()]).with_speed(CARRY_SPEED),
-            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]),
-            MoveCommand::new(Axis::HookLift, 0.0).with_speed(crate::lift::ENGAGE_SPEED),
+            // Hold the box engage_dz above the engage height, so it hangs just
+            // over the tray, then set it down slowly with the mast.
+            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()] + engage_dz),
+            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]).with_speed(ENGAGE_SPEED),
         ];
         push(&mut steps, carry, &mut at);
         let home = route::route(at, Pose::Home, meta)?;
@@ -172,11 +174,11 @@ impl Transfer {
         let engage = route::route(at, Pose::Cell(r, c), meta)?;
         push(&mut steps, engage, &mut at);
         let engaged = at;
+        let engage_dz = crate::Hook::engage_dz(&crate::PassiveHook);
 
         // 2. Lift: hook takes the handle (slow), mast raises the box clear of the water.
         let lift = LiftSequence::build(engaged, LIFT_HEIGHT);
-        at.0[Axis::HookLift.index()] += crate::Hook::engage_dz(&crate::PassiveHook);
-        at.0[Axis::MastZ.index()] += LIFT_HEIGHT;
+        at.0[Axis::MastZ.index()] += engage_dz + LIFT_HEIGHT;
         steps.push(Box::new(lift));
 
         // 3. Carry: rise to travel height, retract, run the rail, reach over
@@ -192,23 +194,27 @@ impl Transfer {
         };
         // With slots, other boxes may wait on the exit tray: carry above them.
         // Without, the Phase 6 height (the gate's tuning) is unchanged.
-        let travel = if slot.is_some() {
-            loaded_travel_z(meta)
-        } else {
-            travel_z(meta)
-        };
+        // The heights are for the old arm, whose hook stroke held a carried
+        // box engage_dz above the mast. The fork's hook is the mast, so carry
+        // engage_dz higher to keep the same clearances.
+        let travel = engage_dz
+            + if slot.is_some() {
+                loaded_travel_z(meta)
+            } else {
+                travel_z(meta)
+            };
         let carry = vec![
             MoveCommand::new(Axis::MastZ, travel.max(at.0[Axis::MastZ.index()])),
-            MoveCommand::new(Axis::ArmX, 0.0).with_speed(CARRY_SPEED),
+            MoveCommand::new(Axis::ArmX, FOLDED).with_speed(CARRY_SPEED),
             MoveCommand::new(Axis::RailY, exit.0[Axis::RailY.index()]).with_speed(CARRY_SPEED),
             MoveCommand::new(Axis::ArmX, exit.0[Axis::ArmX.index()]).with_speed(CARRY_SPEED),
-            // 4. Lower to the exit engage height, still holding the box
-            //    (hook lifted), so it hangs just above the tray.
-            //    6.6 replaces this with LowerUntilContact.
-            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]),
-            // 5. Release: hook down sets the box on the tray, leaving the
-            //    finger centred under the handle with room to back out.
-            MoveCommand::new(Axis::HookLift, 0.0).with_speed(crate::lift::ENGAGE_SPEED),
+            // 4. Lower to engage_dz above the exit engage height, still
+            //    holding the box, so it hangs just above the tray.
+            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()] + engage_dz),
+            // 5. Release: the mast sets the box on the tray slowly, leaving
+            //    the finger centred under the handle with room to back out.
+            //    (The old arm did this with its hook stroke.)
+            MoveCommand::new(Axis::MastZ, exit.0[Axis::MastZ.index()]).with_speed(ENGAGE_SPEED),
         ];
         push(&mut steps, carry, &mut at);
 

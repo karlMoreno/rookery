@@ -69,7 +69,7 @@ fn the_rack_has_a_window_per_shelf_and_one_tray_keeps_the_phase_3_window() {
     let m = rack();
     let w = ShelfWindows::from_meta(&m).unwrap();
     assert_eq!(w.0.len(), 3);
-    let bases = [0.0, 0.285, 0.57];
+    let bases = [0.0, 0.315, 0.63];
     for (i, r) in w.0.iter().enumerate() {
         assert!((r.lo - (bases[i] + 0.085)).abs() < 1e-9, "shelf {i}: {r:?}");
         assert!(r.hi > r.lo + 0.07);
@@ -81,10 +81,10 @@ fn the_rack_has_a_window_per_shelf_and_one_tray_keeps_the_phase_3_window() {
 
 #[test]
 fn an_impossible_rack_is_refused_with_a_named_error() {
-    let squash = RACK.replace("0.285", "0.2").replace("0.57", "0.4");
+    let squash = RACK.replace("0.315", "0.2").replace("0.63", "0.4");
     let e = ShelfWindows::from_meta(&SceneMeta::from_json(&squash).unwrap()).unwrap_err();
     assert!(matches!(e, WindowError::TooThin { shelf: 0, .. }), "{e:?}");
-    let tall = RACK.replace("0.57", "0.9");
+    let tall = RACK.replace("0.63", "0.95");
     let e = ShelfWindows::from_meta(&SceneMeta::from_json(&tall).unwrap()).unwrap_err();
     assert!(matches!(e, WindowError::OutsideMast { .. }), "{e:?}");
     assert!(e.to_string().contains("outside the mast"));
@@ -144,7 +144,10 @@ fn a_transfer_from_every_shelf_into_a_slot_stays_inside_the_windows() {
             assert!(
                 trace
                     .iter()
-                    .any(|q| (0..3).all(|k| (q.0[k] - at.0[k]).abs() < 1e-6)),
+                    // Set down by the mast: in the landing tick the finger
+                    // may already start backing out, by up to PRE.
+                    .any(|q| (0..2).all(|k| (q.0[k] - at.0[k]).abs() < 1e-6)
+                        && (at.0[2] - mast::route::PRE - 1e-6..=at.0[2] + 1e-6).contains(&q.0[2])),
                 "tray {t}: never set down at slot {slot}"
             );
             // The lifted box never leaves its shelf's window before the arm is in.
