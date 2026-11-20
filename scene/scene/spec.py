@@ -63,13 +63,19 @@ MIN_HOOK_CLEARANCE = 0.004
 RAIL_Y_REACH = 0.40
 #: Stacked trays (Phase 10): the smallest clear gap between a tray's handle
 #: tops and the floor of the tray above. A lift raises a box about 10 cm
-#: (2 cm hook, 8 cm mast), so 13 cm leaves 3 cm. Today's default (8 cm) only
-#: suits one tray.
+#: (2 cm engage, 8 cm lift, both by the mast), so 13 cm leaves 3 cm. Today's
+#: default (8 cm) only suits one tray.
 MIN_STACKED_SHELF_GAP = 0.13
+#: How far the telescoping fork's top rises above the hook, mirrored from
+#: limits.rs FORK_ABOVE_HOOK (crane swap; test_gantry.py checks it). Under a
+#: shelf the lifted fork, not the handle, must clear the tray above.
+FORK_ABOVE_HOOK_FOR_SPEC = 0.072
+#: Room kept under the tray above, mirrored from mast windows.rs UNDER_SHELF_MARGIN.
+UNDER_SHELF_MARGIN_FOR_SPEC = 0.01
 #: The mast's top, mirrored from limits.rs MAST_Z (and builder.GANTRY_RANGES),
 #: and how far above a box's floor the hook sits when engaged plus the lift.
 #: The top shelf's box must still be liftable under it.
-MAST_Z_TOP = 0.80
+MAST_Z_TOP = 0.85
 ENGAGE_PLUS_LIFT = 0.08 + 0.01 + 0.10
 #: Tray floor thickness, mirrored from builder.TRAY_WALL.
 TRAY_FLOOR_FOR_SPEC = 0.01
@@ -82,7 +88,11 @@ MAX_EXIT_SLOTS = 6
 #: Default height of the exit tray's top surface, in metres.
 EXIT_TRAY_Z = 0.10
 #: Default distance from the exit tray's aisle edge to the floor rail, in metres.
-RAIL_SETBACK = 0.12
+#: The folded fork holds a carried box's far edge 0.15 m in front of the rail
+#: (fork 0.07 + half the finger + half a 120 mm box), so the box clears the
+#: exit tray with 2 cm to spare while the mast changes level (crane swap; it
+#: was 0.12 with the old arm, which retracted to the rail).
+RAIL_SETBACK = 0.17
 
 #: Presets the builder knows. ``"drop"`` is the Phase 1 plane-and-box scene (row 2.7).
 PRESETS: tuple[str, ...] = ("drop",)
@@ -428,6 +438,15 @@ class SceneSpec:
                         f"shelf_gap {self.shelf_gap:.3f} is too small for stacked trays: a lifted box needs "
                         f"{MIN_STACKED_SHELF_GAP:.2f} m under the tray above"
                     )
+                for t in range(self.trays - 1):
+                    fork_top = (self.shelf_base_z(t) + ENGAGE_PLUS_LIFT + FORK_ABOVE_HOOK_FOR_SPEC
+                                + UNDER_SHELF_MARGIN_FOR_SPEC + TRAY_FLOOR_FOR_SPEC)
+                    if fork_top > self.shelf_base_z(t + 1) + EPS:
+                        p.append(
+                            f"tray {t}: the lifted fork's top needs {fork_top - self.shelf_base_z(t):.3f} m "
+                            f"under the tray above, which is {self.shelf_base_z(t + 1) - self.shelf_base_z(t):.3f} m "
+                            "up; raise shelf_gap"
+                        )
                 top = self.shelf_base_z(self.trays - 1) + ENGAGE_PLUS_LIFT
                 if top > MAST_Z_TOP + EPS:
                     p.append(

@@ -10,12 +10,16 @@
 //!
 //! ```text
 //!   LiftSequence::build(engaged, lift_height) = MacroCommand [
-//!     HookLift → +engage_dz        slow: the finger takes the handle's weight
-//!     MastZ    → +lift_height      the box leaves the water
+//!     MastZ → +engage_dz              slow: the finger takes the handle's weight
+//!     MastZ → +engage_dz+lift_height  the box leaves the water
 //!   ]
-//!   undo → MacroCommand [ MastZ back, HookLift back ]
+//!   undo → MacroCommand [ MastZ back, MastZ back ]
+//!
+//! The fork's hook is rigid (crane swap, D1), so the mast does the engage
+//! that the old arm's `hook_lift` stroke did, at the same 1 cm/s.
 //! ```
 
+use crate::limits::MAX_VEL;
 use crate::{
     Axis, CmdStatus, Command, GantryObs, GantryState, Hook, JointTargets, MoveCommand, PassiveHook,
 };
@@ -26,8 +30,12 @@ use crate::{
 /// shelf rule allows it with the arm out.
 pub const LIFT_HEIGHT: f64 = 0.08;
 
-/// Fraction of `MAX_VEL` for the engage (hook takes the handle's weight).
-pub const ENGAGE_SPEED: f64 = 0.5;
+/// How fast the hook rises into the handle during the engage, m/s. The old
+/// arm's hook stroke engaged at 0.5 × 0.02 m/s; the mast keeps that pace.
+pub const ENGAGE_VEL: f64 = 0.01;
+/// Fraction of the mast's `MAX_VEL` for the engage (hook takes the handle's
+/// weight) and for setting a box down: `ENGAGE_VEL` / 0.15 m/s.
+pub const ENGAGE_SPEED: f64 = ENGAGE_VEL / MAX_VEL[1];
 /// Fraction of `MAX_VEL` for the mast rise with the box hanging. Full speed
 /// is fine once the hook is a 30 mm saddle: in the probe, 100 offset lifts
 /// peaked at 0.83° roll (row 5.5).
@@ -88,20 +96,12 @@ pub struct LiftSequence;
 
 impl LiftSequence {
     /// The lift for a crane engaged at `engaged` (finger under the handle):
-    /// hook up by `PassiveHook::engage_dz`, then mast up by `lift_height`.
+    /// mast up slowly by `PassiveHook::engage_dz`, then up by `lift_height`.
     pub fn build(engaged: JointTargets, lift_height: f64) -> MacroCommand {
+        let engage_z = engaged.0[Axis::MastZ.index()] + PassiveHook.engage_dz();
         MacroCommand::new(vec![
-            Box::new(
-                MoveCommand::new(
-                    Axis::HookLift,
-                    engaged.0[Axis::HookLift.index()] + PassiveHook.engage_dz(),
-                )
-                .with_speed(ENGAGE_SPEED),
-            ),
-            Box::new(
-                MoveCommand::new(Axis::MastZ, engaged.0[Axis::MastZ.index()] + lift_height)
-                    .with_speed(LIFT_SPEED),
-            ),
+            Box::new(MoveCommand::new(Axis::MastZ, engage_z).with_speed(ENGAGE_SPEED)),
+            Box::new(MoveCommand::new(Axis::MastZ, engage_z + lift_height).with_speed(LIFT_SPEED)),
         ])
     }
 }

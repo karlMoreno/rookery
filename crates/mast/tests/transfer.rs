@@ -54,7 +54,11 @@ fn a_transfer_passes_through_the_exit_and_ends_home() {
     assert!(
         trace
             .iter()
-            .any(|t| t.0[0] == exit.0[0] && t.0[2] == exit.0[2] && t.0[1] == exit.0[1]),
+            // The fork sets the box down with the mast, and in the tick the
+            // mast lands the finger already starts backing out (by up to PRE).
+            .any(|t| t.0[0] == exit.0[0]
+                && t.0[1] == exit.0[1]
+                && (exit.0[2] - PRE..=exit.0[2]).contains(&t.0[2])),
         "the crane must reach the exit engage pose"
     );
 }
@@ -142,7 +146,10 @@ fn a_transfer_into_a_slot_sets_the_box_down_there() {
         assert!(
             trace
                 .iter()
-                .any(|q| (0..3).all(|k| (q.0[k] - at.0[k]).abs() < 1e-6)),
+                // Released by the mast: in the landing tick the finger may
+                // already start backing out, by up to PRE.
+                .any(|q| (0..2).all(|k| (q.0[k] - at.0[k]).abs() < 1e-6)
+                    && (at.0[2] - PRE - 1e-6..=at.0[2] + 1e-6).contains(&q.0[2])),
             "slot {slot}: never released at {at:?}"
         );
         assert_eq!(st.targets, home());
@@ -212,10 +219,12 @@ fn a_slot_transfer_carries_high_enough_to_clear_boxes_on_the_exit_tray() {
     };
     let mut t = Transfer::build_to(st.targets, 3, 1, Some(0), &m).unwrap();
     let (_, trace) = run(&mut t, &mut st, 20_000);
-    // While the arm retracts with the box (hook lifted), the mast is up there.
+    // While the fork folds with the box, the mast is up there, plus the
+    // engage rise that the old arm's hook stroke used to add on top.
+    let carry = z + <mast::PassiveHook as mast::Hook>::engage_dz(&mast::PassiveHook);
     assert!(
         trace
             .iter()
-            .any(|q| (q.0[Axis::MastZ.index()] - z).abs() < 1e-9)
+            .any(|q| (q.0[Axis::MastZ.index()] - carry).abs() < 1e-9)
     );
 }
